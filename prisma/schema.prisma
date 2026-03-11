@@ -1,0 +1,270 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// User (synced from Clerk via webhook)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(cuid())
+  clerkId   String   @unique
+  email     String   @unique
+  firstName String?
+  lastName  String?
+  imageUrl  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  taxYears    TaxYear[]
+  auditLogs   AuditLog[]
+
+  @@index([clerkId])
+  @@index([email])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tax Year
+// ─────────────────────────────────────────────────────────────────────────────
+
+model TaxYear {
+  id        String         @id @default(cuid())
+  userId    String
+  year      Int
+  status    TaxYearStatus  @default(IN_PROGRESS)
+  filingStatus FilingStatus @default(SINGLE)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documents   Document[]
+  deductions  Deduction[]
+  taxForms    TaxForm[]
+
+  @@unique([userId, year])
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Document
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Document {
+  id           String         @id @default(cuid())
+  taxYearId    String
+  name         String
+  type         DocumentType
+  s3Key        String
+  s3Bucket     String
+  mimeType     String
+  sizeBytes    Int
+  status       DocumentStatus @default(PENDING)
+  uploadedAt   DateTime       @default(now())
+  processedAt  DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  taxYear       TaxYear        @relation(fields: [taxYearId], references: [id], onDelete: Cascade)
+  extractedData ExtractedData?
+
+  @@index([taxYearId])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Extracted Data (OCR results)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ExtractedData {
+  id           String   @id @default(cuid())
+  documentId   String   @unique
+  rawData      Json
+  parsedFields Json
+  confidence   Float    @default(0)
+  reviewedAt   DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Deduction
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Deduction {
+  id          String          @id @default(cuid())
+  taxYearId   String
+  category    String
+  description String
+  amount      Float
+  source      DeductionSource
+  confidence  Float           @default(0)
+  selected    Boolean         @default(false)
+  reasoning   String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  taxYear TaxYear @relation(fields: [taxYearId], references: [id], onDelete: Cascade)
+
+  @@index([taxYearId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tax Form
+// ─────────────────────────────────────────────────────────────────────────────
+
+model TaxForm {
+  id          String         @id @default(cuid())
+  taxYearId   String
+  formType    FormType
+  status      FormStatus     @default(DRAFT)
+  pdfS3Key    String?
+  generatedAt DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  taxYear          TaxYear           @relation(fields: [taxYearId], references: [id], onDelete: Cascade)
+  fields           FormField[]
+  validationErrors ValidationError[]
+
+  @@index([taxYearId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Form Field
+// ─────────────────────────────────────────────────────────────────────────────
+
+model FormField {
+  id        String   @id @default(cuid())
+  formId    String
+  fieldName String
+  lineNumber String?
+  value     String?
+  isEdited  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  form TaxForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  @@unique([formId, fieldName])
+  @@index([formId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Validation Error
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ValidationError {
+  id        String          @id @default(cuid())
+  formId    String
+  fieldName String?
+  severity  ErrorSeverity
+  code      String
+  message   String
+  resolved  Boolean         @default(false)
+  createdAt DateTime        @default(now())
+
+  form TaxForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  @@index([formId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Audit Log
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String
+  action    String
+  resource  String?
+  resourceId String?
+  metadata  Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum TaxYearStatus {
+  IN_PROGRESS
+  COMPLETED
+  FILED
+  AMENDED
+}
+
+enum FilingStatus {
+  SINGLE
+  MARRIED_FILING_JOINTLY
+  MARRIED_FILING_SEPARATELY
+  HEAD_OF_HOUSEHOLD
+  QUALIFYING_SURVIVING_SPOUSE
+}
+
+enum DocumentType {
+  W2
+  FORM_1099_NEC
+  FORM_1099_INT
+  FORM_1099_DIV
+  FORM_1099_MISC
+  FORM_1099_R
+  FORM_1098
+  FORM_1095
+  RECEIPT
+  BANK_STATEMENT
+  OTHER
+}
+
+enum DocumentStatus {
+  PENDING
+  PROCESSING
+  PROCESSED
+  FAILED
+  NEEDS_REVIEW
+}
+
+enum DeductionSource {
+  AI_SUGGESTED
+  DOCUMENT_EXTRACTED
+  USER_ENTERED
+}
+
+enum FormType {
+  FORM_1040
+  SCHEDULE_A
+  SCHEDULE_B
+  SCHEDULE_C
+  SCHEDULE_D
+  SCHEDULE_E
+  SCHEDULE_SE
+}
+
+enum FormStatus {
+  DRAFT
+  REVIEW
+  FINALIZED
+  FILED
+}
+
+enum ErrorSeverity {
+  ERROR
+  WARNING
+  INFO
+}
