@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Menu, FileText } from "lucide-react";
+import Image from "next/image";
+import { Menu } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";
 import {
   Sheet,
@@ -34,9 +35,14 @@ export function MobileNav() {
               onClick={() => setOpen(false)}
               className="flex items-center gap-2.5"
             >
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-900 text-white">
-                <FileText className="h-4 w-4" />
-              </div>
+              <Image
+                src="/Logo.png"
+                alt="TaxSense"
+                width={32}
+                height={32}
+                className="object-contain"
+                priority
+              />
               <span className="text-lg font-bold text-gray-900">TaxSense</span>
             </Link>
           </div>
@@ -56,9 +62,14 @@ export function MobileNav() {
 
       {/* Centered logo */}
       <Link href="/dashboard" className="flex items-center gap-2">
-        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-900 text-white">
-          <FileText className="h-3.5 w-3.5" />
-        </div>
+        <Image
+          src="/Logo.png"
+          alt="TaxSense"
+          width={28}
+          height={28}
+          className="object-contain"
+          priority
+        />
         <span className="font-bold text-gray-900">TaxSense</span>
       </Link>
 

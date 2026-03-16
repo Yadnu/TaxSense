@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { FileText, LogOut } from "lucide-react";
+import Image from "next/image";
+import { LogOut } from "lucide-react";
 import { UserButton, SignOutButton } from "@clerk/nextjs";
 import { NavLinks } from "@/components/dashboard/nav-links";
 
@@ -10,9 +11,14 @@ export function Sidebar() {
       {/* Logo — matches header height (h-14) */}
       <div className="flex h-14 items-center border-b border-slate-200 px-5">
         <Link href="/dashboard" className="group flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-900 text-white shadow-sm transition-colors duration-150 group-hover:bg-blue-800">
-            <FileText className="h-4 w-4" />
-          </div>
+          <Image
+            src="/Logo.png"
+            alt="TaxSense"
+            width={32}
+            height={32}
+            className="object-contain"
+            priority
+          />
           <span className="text-[17px] font-bold tracking-tight text-gray-900">
             TaxSense
           </span>

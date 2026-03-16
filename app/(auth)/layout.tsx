@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { FileText, Shield, CheckCircle } from "lucide-react";
+import Image from "next/image";
+import { Shield, CheckCircle } from "lucide-react";
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -10,9 +11,14 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         <div>
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-blue-900">
-              <FileText className="h-4 w-4" />
-            </div>
+            <Image
+              src="/Logo.png"
+              alt="TaxSense"
+              width={32}
+              height={32}
+              className="object-contain"
+              priority
+            />
             <span className="text-lg font-bold text-white">TaxSense</span>
           </Link>
 
@@ -56,9 +62,14 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
         {/* Mobile logo */}
         <Link href="/" className="mb-8 flex items-center gap-2 lg:hidden">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-900 text-white">
-            <FileText className="h-4 w-4" />
-          </div>
+          <Image
+            src="/Logo.png"
+            alt="TaxSense"
+            width={32}
+            height={32}
+            className="object-contain"
+            priority
+          />
           <span className="text-lg font-bold text-gray-900">TaxSense</span>
         </Link>
 
