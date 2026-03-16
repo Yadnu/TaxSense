@@ -47,7 +47,7 @@ export async function getCurrentUser(): Promise<User> {
   }
 
   const user = await prisma.user.upsert({
-    where: { clerkId: clerkUser.id },
+    where: { id: clerkUser.id },
     update: {
       email,
       firstName: clerkUser.firstName ?? undefined,
@@ -55,7 +55,7 @@ export async function getCurrentUser(): Promise<User> {
       imageUrl: clerkUser.imageUrl ?? undefined,
     },
     create: {
-      clerkId: clerkUser.id,
+      id: clerkUser.id,
       email,
       firstName: clerkUser.firstName ?? undefined,
       lastName: clerkUser.lastName ?? undefined,
@@ -73,7 +73,7 @@ export async function getCurrentUser(): Promise<User> {
 export async function getUserByClerkId(
   clerkId: string
 ): Promise<User | null> {
-  return prisma.user.findUnique({ where: { clerkId } });
+  return prisma.user.findUnique({ where: { id: clerkId } });
 }
 
 /**

@@ -2,21 +2,22 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// User (synced from Clerk via webhook)
+// User (synced from Clerk via webhook; id IS the Clerk user ID)
 // ─────────────────────────────────────────────────────────────────────────────
 
 model User {
-  id        String   @id @default(cuid())
-  clerkId   String   @unique
+  id        String   @id // Clerk user ID (e.g. "user_2abc...")
   email     String   @unique
   firstName String?
   lastName  String?
@@ -24,10 +25,11 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  taxYears    TaxYear[]
-  auditLogs   AuditLog[]
+  documents    Document[]
+  chatSessions ChatSession[]
+  taxYears     TaxYear[]
+  auditLogs    AuditLog[]
 
-  @@index([clerkId])
   @@index([email])
 }
 
@@ -36,18 +38,18 @@ model User {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model TaxYear {
-  id        String         @id @default(cuid())
-  userId    String
-  year      Int
-  status    TaxYearStatus  @default(IN_PROGRESS)
-  filingStatus FilingStatus @default(SINGLE)
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
+  id           String        @id @default(cuid())
+  userId       String
+  year         Int
+  status       TaxYearStatus @default(IN_PROGRESS)
+  filingStatus FilingStatus  @default(SINGLE)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
-  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  documents   Document[]
-  deductions  Deduction[]
-  taxForms    TaxForm[]
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documents  Document[]
+  deductions Deduction[]
+  taxForms   TaxForm[]
 
   @@unique([userId, year])
   @@index([userId])
@@ -58,42 +60,109 @@ model TaxYear {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Document {
-  id           String         @id @default(cuid())
-  taxYearId    String
-  name         String
-  type         DocumentType
-  s3Key        String
-  s3Bucket     String
-  mimeType     String
-  sizeBytes    Int
-  status       DocumentStatus @default(PENDING)
-  uploadedAt   DateTime       @default(now())
-  processedAt  DateTime?
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  id               String         @id @default(cuid())
+  userId           String
+  taxYearId        String?
+  originalFilename String
+  s3Key            String
+  s3Bucket         String
+  mimeType         String
+  sizeBytes        Int
+  documentType     DocumentType   @default(OTHER)
+  status           DocumentStatus @default(UPLOADED)
+  rawText          String?        @db.Text
+  ocrEngine        OcrEngine?
+  uploadedAt       DateTime       @default(now())
+  processedAt      DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
 
-  taxYear       TaxYear        @relation(fields: [taxYearId], references: [id], onDelete: Cascade)
-  extractedData ExtractedData?
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  taxYear         TaxYear?         @relation(fields: [taxYearId], references: [id], onDelete: SetNull)
+  extractedFields ExtractedField[]
 
+  @@index([userId])
+  @@index([userId, status])
   @@index([taxYearId])
-  @@index([status])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Extracted Data (OCR results)
+// ExtractedField (individual field extracted from a document via OCR + LLM)
 // ─────────────────────────────────────────────────────────────────────────────
 
-model ExtractedData {
-  id           String   @id @default(cuid())
-  documentId   String   @unique
-  rawData      Json
-  parsedFields Json
-  confidence   Float    @default(0)
-  reviewedAt   DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+model ExtractedField {
+  id         String      @id @default(cuid())
+  documentId String
+  fieldName  String
+  fieldValue String?
+  confidence Float       @default(0) // 0.0–1.0
+  pageNumber Int?
+  fieldGroup String? // category, e.g. "employer_info", "income", "withholding"
+  source     FieldSource
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@index([documentId, fieldGroup])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ChatSession (conversation container per user)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ChatSession {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages ChatMessage[]
+
+  @@index([userId])
+  @@index([userId, updatedAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ChatMessage (individual message with role, content, and source citations)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ChatMessage {
+  id        String      @id @default(cuid())
+  sessionId String
+  role      MessageRole
+  content   String      @db.Text
+  sources   Json? // Array of { chunkId, title, source, excerpt } references
+  createdAt DateTime    @default(now())
+
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([sessionId, createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KnowledgeChunk (RAG knowledge base; embedding vector added via raw SQL migration)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model KnowledgeChunk {
+  id         String   @id @default(cuid())
+  source     String // file path or identifier of the source document
+  title      String // human-readable document title
+  content    String   @db.Text // the chunk text (512-token window)
+  chunkIndex Int // position of this chunk within the source
+  tokenCount Int? // approximate token count of content
+  metadata   Json? // additional metadata (section headings, page refs, etc.)
+  createdAt  DateTime @default(now())
+
+  // NOTE: "embedding vector(1536)" column is added via raw SQL migration
+  // (prisma/migrations/20260311000000_add_pgvector/migration.sql)
+  // and is NOT declared here because Prisma has no native vector type.
+
+  @@index([source])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -119,18 +188,18 @@ model Deduction {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Tax Form
+// TaxForm
 // ─────────────────────────────────────────────────────────────────────────────
 
 model TaxForm {
-  id          String         @id @default(cuid())
+  id          String     @id @default(cuid())
   taxYearId   String
   formType    FormType
-  status      FormStatus     @default(DRAFT)
+  status      FormStatus @default(DRAFT)
   pdfS3Key    String?
   generatedAt DateTime?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
   taxYear          TaxYear           @relation(fields: [taxYearId], references: [id], onDelete: Cascade)
   fields           FormField[]
@@ -140,18 +209,18 @@ model TaxForm {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Form Field
+// FormField
 // ─────────────────────────────────────────────────────────────────────────────
 
 model FormField {
-  id        String   @id @default(cuid())
-  formId    String
-  fieldName String
+  id         String   @id @default(cuid())
+  formId     String
+  fieldName  String
   lineNumber String?
-  value     String?
-  isEdited  Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  value      String?
+  isEdited   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   form TaxForm @relation(fields: [formId], references: [id], onDelete: Cascade)
 
@@ -160,18 +229,18 @@ model FormField {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Validation Error
+// ValidationError
 // ─────────────────────────────────────────────────────────────────────────────
 
 model ValidationError {
-  id        String          @id @default(cuid())
+  id        String        @id @default(cuid())
   formId    String
   fieldName String?
   severity  ErrorSeverity
   code      String
   message   String
-  resolved  Boolean         @default(false)
-  createdAt DateTime        @default(now())
+  resolved  Boolean       @default(false)
+  createdAt DateTime      @default(now())
 
   form TaxForm @relation(fields: [formId], references: [id], onDelete: Cascade)
 
@@ -179,19 +248,19 @@ model ValidationError {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Audit Log
+// AuditLog
 // ─────────────────────────────────────────────────────────────────────────────
 
 model AuditLog {
-  id        String   @id @default(cuid())
-  userId    String
-  action    String
-  resource  String?
+  id         String   @id @default(cuid())
+  userId     String
+  action     String
+  resource   String?
   resourceId String?
-  metadata  Json?
-  ipAddress String?
-  userAgent String?
-  createdAt DateTime @default(now())
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -220,6 +289,9 @@ enum FilingStatus {
 
 enum DocumentType {
   W2
+  FORM_1040
+  FORM_1040_NR
+  FORM_1099
   FORM_1099_NEC
   FORM_1099_INT
   FORM_1099_DIV
@@ -233,11 +305,28 @@ enum DocumentType {
 }
 
 enum DocumentStatus {
-  PENDING
+  UPLOADED
   PROCESSING
-  PROCESSED
+  EXTRACTED
   FAILED
   NEEDS_REVIEW
+}
+
+enum OcrEngine {
+  TESSERACT
+  TEXTRACT
+}
+
+enum FieldSource {
+  OCR
+  LLM_INFERENCE
+  USER_PROVIDED
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
 }
 
 enum DeductionSource {
