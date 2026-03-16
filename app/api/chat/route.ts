@@ -1,8 +1,17 @@
+import arcjet, { tokenBucket } from "@arcjet/next";
 import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/db";
 import { generateRAGResponse, generateChatTitle } from "@/lib/rag/generate";
+import { getServerConfig } from "@/lib/config";
+
+const aj = arcjet({
+  key: getServerConfig().ARCJET_KEY,
+  rules: [
+    tokenBucket({ mode: "LIVE", refillRate: 10, interval: 60, capacity: 20 }),
+  ],
+});
 
 // ─── Request schema ─────────────────────────────────────────────────────────
 // The Vercel AI SDK useChat hook sends { messages, id, ...customBody }
@@ -40,6 +49,11 @@ export async function POST(req: NextRequest) {
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const decision = await aj.protect(req, { requested: 1 });
+  if (decision.isDenied()) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
   let rawBody: unknown;
