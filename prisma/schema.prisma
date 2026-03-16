@@ -1,0 +1,359 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// User (synced from Clerk via webhook; id IS the Clerk user ID)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id        String   @id // Clerk user ID (e.g. "user_2abc...")
+  email     String   @unique
+  firstName String?
+  lastName  String?
+  imageUrl  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  documents    Document[]
+  chatSessions ChatSession[]
+  taxYears     TaxYear[]
+  auditLogs    AuditLog[]
+
+  @@index([email])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tax Year
+// ─────────────────────────────────────────────────────────────────────────────
+
+model TaxYear {
+  id           String        @id @default(cuid())
+  userId       String
+  year         Int
+  status       TaxYearStatus @default(IN_PROGRESS)
+  filingStatus FilingStatus  @default(SINGLE)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documents  Document[]
+  deductions Deduction[]
+  taxForms   TaxForm[]
+
+  @@unique([userId, year])
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Document
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Document {
+  id               String         @id @default(cuid())
+  userId           String
+  taxYearId        String?
+  originalFilename String
+  s3Key            String
+  s3Bucket         String
+  mimeType         String
+  sizeBytes        Int
+  documentType     DocumentType   @default(OTHER)
+  status           DocumentStatus @default(UPLOADED)
+  rawText          String?        @db.Text
+  ocrEngine        OcrEngine?
+  uploadedAt       DateTime       @default(now())
+  processedAt      DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  taxYear         TaxYear?         @relation(fields: [taxYearId], references: [id], onDelete: SetNull)
+  extractedFields ExtractedField[]
+
+  @@index([userId])
+  @@index([userId, status])
+  @@index([taxYearId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ExtractedField (individual field extracted from a document via OCR + LLM)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ExtractedField {
+  id         String      @id @default(cuid())
+  documentId String
+  fieldName  String
+  fieldValue String?
+  confidence Float       @default(0) // 0.0–1.0
+  pageNumber Int?
+  fieldGroup String? // category, e.g. "employer_info", "income", "withholding"
+  source     FieldSource
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@index([documentId, fieldGroup])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ChatSession (conversation container per user)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ChatSession {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages ChatMessage[]
+
+  @@index([userId])
+  @@index([userId, updatedAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ChatMessage (individual message with role, content, and source citations)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ChatMessage {
+  id        String      @id @default(cuid())
+  sessionId String
+  role      MessageRole
+  content   String      @db.Text
+  sources   Json? // Array of { chunkId, title, source, excerpt } references
+  createdAt DateTime    @default(now())
+
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([sessionId, createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KnowledgeChunk (RAG knowledge base; embedding vector added via raw SQL migration)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model KnowledgeChunk {
+  id         String   @id @default(cuid())
+  source     String // file path or identifier of the source document
+  title      String // human-readable document title
+  content    String   @db.Text // the chunk text (512-token window)
+  chunkIndex Int // position of this chunk within the source
+  tokenCount Int? // approximate token count of content
+  metadata   Json? // additional metadata (section headings, page refs, etc.)
+  createdAt  DateTime @default(now())
+
+  // NOTE: "embedding vector(1536)" column is added via raw SQL migration
+  // (prisma/migrations/20260311000000_add_pgvector/migration.sql)
+  // and is NOT declared here because Prisma has no native vector type.
+
+  @@index([source])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Deduction
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Deduction {
+  id          String          @id @default(cuid())
+  taxYearId   String
+  category    String
+  description String
+  amount      Float
+  source      DeductionSource
+  confidence  Float           @default(0)
+  selected    Boolean         @default(false)
+  reasoning   String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  taxYear TaxYear @relation(fields: [taxYearId], references: [id], onDelete: Cascade)
+
+  @@index([taxYearId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TaxForm
+// ─────────────────────────────────────────────────────────────────────────────
+
+model TaxForm {
+  id          String     @id @default(cuid())
+  taxYearId   String
+  formType    FormType
+  status      FormStatus @default(DRAFT)
+  pdfS3Key    String?
+  generatedAt DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  taxYear          TaxYear           @relation(fields: [taxYearId], references: [id], onDelete: Cascade)
+  fields           FormField[]
+  validationErrors ValidationError[]
+
+  @@index([taxYearId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FormField
+// ─────────────────────────────────────────────────────────────────────────────
+
+model FormField {
+  id         String   @id @default(cuid())
+  formId     String
+  fieldName  String
+  lineNumber String?
+  value      String?
+  isEdited   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  form TaxForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  @@unique([formId, fieldName])
+  @@index([formId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ValidationError
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ValidationError {
+  id        String        @id @default(cuid())
+  formId    String
+  fieldName String?
+  severity  ErrorSeverity
+  code      String
+  message   String
+  resolved  Boolean       @default(false)
+  createdAt DateTime      @default(now())
+
+  form TaxForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  @@index([formId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AuditLog
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  action     String
+  resource   String?
+  resourceId String?
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum TaxYearStatus {
+  IN_PROGRESS
+  COMPLETED
+  FILED
+  AMENDED
+}
+
+enum FilingStatus {
+  SINGLE
+  MARRIED_FILING_JOINTLY
+  MARRIED_FILING_SEPARATELY
+  HEAD_OF_HOUSEHOLD
+  QUALIFYING_SURVIVING_SPOUSE
+}
+
+enum DocumentType {
+  W2
+  FORM_1040
+  FORM_1040_NR
+  FORM_1099
+  FORM_1099_NEC
+  FORM_1099_INT
+  FORM_1099_DIV
+  FORM_1099_MISC
+  FORM_1099_R
+  FORM_1098
+  FORM_1095
+  RECEIPT
+  BANK_STATEMENT
+  OTHER
+}
+
+enum DocumentStatus {
+  UPLOADED
+  PROCESSING
+  EXTRACTED
+  FAILED
+  NEEDS_REVIEW
+}
+
+enum OcrEngine {
+  TESSERACT
+  TEXTRACT
+}
+
+enum FieldSource {
+  OCR
+  LLM_INFERENCE
+  USER_PROVIDED
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+enum DeductionSource {
+  AI_SUGGESTED
+  DOCUMENT_EXTRACTED
+  USER_ENTERED
+}
+
+enum FormType {
+  FORM_1040
+  SCHEDULE_A
+  SCHEDULE_B
+  SCHEDULE_C
+  SCHEDULE_D
+  SCHEDULE_E
+  SCHEDULE_SE
+}
+
+enum FormStatus {
+  DRAFT
+  REVIEW
+  FINALIZED
+  FILED
+}
+
+enum ErrorSeverity {
+  ERROR
+  WARNING
+  INFO
+}
