@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+// Treats empty strings the same as absent — yields undefined for optional fields.
+const optionalEnvString = z.preprocess(
+  (val) => (typeof val === "string" && val.trim() === "" ? undefined : val),
+  z.string().min(1).optional()
+);
+
 const serverEnvSchema = z.object({
   // Database
   DATABASE_URL: z.string().url("DATABASE_URL must be a valid PostgreSQL connection URL"),
@@ -8,11 +14,14 @@ const serverEnvSchema = z.object({
   CLERK_SECRET_KEY: z.string().min(1, "CLERK_SECRET_KEY is required"),
   CLERK_WEBHOOK_SECRET: z.string().min(1, "CLERK_WEBHOOK_SECRET is required"),
 
-  // Anthropic
-  ANTHROPIC_API_KEY: z.string().min(1, "ANTHROPIC_API_KEY is required"),
+  // Anthropic (optional when using Groq)
+  ANTHROPIC_API_KEY: optionalEnvString,
 
-  // OpenAI (embeddings only)
-  OPENAI_API_KEY: z.string().min(1, "OPENAI_API_KEY is required"),
+  // Groq (optional when using Anthropic)
+  GROQ_API_KEY: optionalEnvString,
+
+  // HuggingFace (embeddings only) — optional; RAG retrieval is skipped when absent
+  HUGGINGFACE_API_KEY: optionalEnvString,
 
   // AWS
   AWS_ACCESS_KEY_ID: z.string().min(1, "AWS_ACCESS_KEY_ID is required"),
@@ -20,8 +29,8 @@ const serverEnvSchema = z.object({
   AWS_REGION: z.string().min(1, "AWS_REGION is required").default("us-east-1"),
   AWS_S3_BUCKET_NAME: z.string().min(1, "AWS_S3_BUCKET_NAME is required"),
 
-  // Arcjet (rate limiting)
-  ARCJET_KEY: z.string().min(1, "ARCJET_KEY is required"),
+  // Arcjet (rate limiting) — optional; rate limiting is skipped when absent
+  ARCJET_KEY: optionalEnvString,
 
   // Resend (email)
   RESEND_API_KEY: z.string().min(1, "RESEND_API_KEY is required"),

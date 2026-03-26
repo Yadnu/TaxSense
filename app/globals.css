@@ -8,7 +8,7 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-mono: var(--font-mono);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -94,49 +94,51 @@
 
   --radius: 0.5rem;                                /* 8px base radius */
 
-  /* Sidebar */
-  --sidebar: oklch(1 0 0);
-  --sidebar-foreground: oklch(0.255 0.016 264.1);
-  --sidebar-primary: oklch(0.379 0.146 264.1);
-  --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent: oklch(0.967 0.003 264.5);
-  --sidebar-accent-foreground: oklch(0.379 0.146 264.1);
-  --sidebar-border: oklch(0.929 0.006 264.5);
-  --sidebar-ring: oklch(0.379 0.146 264.1);
+  /* Sidebar — warm dark charcoal (stone-900 palette) */
+  --sidebar: oklch(0.15 0.006 60);           /* stone-900  #1c1917 */
+  --sidebar-foreground: oklch(0.92 0.004 60);/* stone-100  near-white */
+  --sidebar-primary: oklch(0.72 0.04 60);    /* stone-300  warm light */
+  --sidebar-primary-foreground: oklch(0.15 0.006 60);
+  --sidebar-accent: oklch(0.20 0.006 60);    /* stone-800  #292524 */
+  --sidebar-accent-foreground: oklch(0.92 0.004 60);
+  --sidebar-border: oklch(0.24 0.006 60);    /* stone-700  */
+  --sidebar-ring: oklch(0.55 0.04 60);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.637 0.131 193.4);
-  --primary-foreground: oklch(0.145 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.637 0.131 193.4);
-  --chart-1: oklch(0.637 0.131 193.4);
+  /* Warm stone-palette dark theme */
+  --background: oklch(0.11 0.004 57);      /* ≈ stone-950 #0c0a09 */
+  --foreground: oklch(0.97 0.002 57);      /* ≈ stone-100 #f5f5f4 */
+  --card: oklch(0.16 0.005 57);            /* ≈ stone-900 #1c1917 */
+  --card-foreground: oklch(0.97 0.002 57);
+  --popover: oklch(0.16 0.005 57);
+  --popover-foreground: oklch(0.97 0.002 57);
+  --primary: oklch(0.588 0.194 258.0);     /* blue-600 for dark bg */
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.22 0.006 57);       /* ≈ stone-800 #292524 */
+  --secondary-foreground: oklch(0.97 0.002 57);
+  --muted: oklch(0.22 0.006 57);           /* ≈ stone-800 */
+  --muted-foreground: oklch(0.55 0.008 57);/* ≈ stone-500 #78716c */
+  --accent: oklch(0.22 0.006 57);
+  --accent-foreground: oklch(0.97 0.002 57);
+  --destructive: oklch(0.63 0.22 25);
+  --border: oklch(0.22 0.006 57);          /* ≈ stone-800 */
+  --input: oklch(0.22 0.006 57);
+  --ring: oklch(0.588 0.194 258.0);
+  --chart-1: oklch(0.588 0.194 258.0);
   --chart-2: oklch(0.766 0.153 142.5);
   --chart-3: oklch(0.855 0.101 91.1);
   --chart-4: oklch(0.905 0.063 91.1);
   --chart-5: oklch(0.951 0.026 91.1);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.637 0.131 193.4);
-  --sidebar-primary-foreground: oklch(0.145 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.637 0.131 193.4);
+  /* Sidebar stays dark in both themes — kept via :root sidebar vars */
+  --sidebar: oklch(0.16 0.005 57);         /* ≈ stone-900 */
+  --sidebar-foreground: oklch(0.97 0.002 57);
+  --sidebar-primary: oklch(0.588 0.194 258.0);
+  --sidebar-primary-foreground: oklch(0.11 0.004 57);
+  --sidebar-accent: oklch(0.22 0.006 57);  /* ≈ stone-800 */
+  --sidebar-accent-foreground: oklch(0.97 0.002 57);
+  --sidebar-border: oklch(0.22 0.006 57);  /* ≈ stone-800 */
+  --sidebar-ring: oklch(0.588 0.194 258.0);
 }
 
 @layer base {
@@ -146,10 +148,19 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   html {
     @apply font-sans;
   }
+}
+
+/* Numeric / financial values — JetBrains Mono with tabular figures */
+.font-numeric {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }
 
 /* ─── Subtle entrance animation (professional — no bounce/flash) ────────── */
@@ -180,81 +191,139 @@
 
 /* ─── Shared component primitives ───────────────────────────────────────── */
 
-/* Primary button — deep blue */
+/* Primary button */
 .btn-primary {
-  @apply inline-flex items-center justify-center gap-2 rounded-lg bg-blue-900 px-4 py-2.5
+  @apply inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5
          text-sm font-semibold text-white shadow-sm
          transition-colors duration-150
-         hover:bg-blue-800 focus-visible:outline-none focus-visible:ring-2
-         focus-visible:ring-blue-900 focus-visible:ring-offset-2
+         hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2
+         focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-background
          disabled:opacity-50 disabled:pointer-events-none;
 }
 
-/* Secondary button — outlined deep blue */
+/* Secondary button */
 .btn-secondary {
-  @apply inline-flex items-center justify-center gap-2 rounded-lg border border-blue-900 px-4 py-2.5
-         text-sm font-semibold text-blue-900
+  @apply inline-flex items-center justify-center gap-2 rounded-lg border border-border px-4 py-2.5
+         text-sm font-semibold text-foreground
          transition-colors duration-150
-         hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2
-         focus-visible:ring-blue-900 focus-visible:ring-offset-2
+         hover:bg-muted focus-visible:outline-none focus-visible:ring-2
+         focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background
          disabled:opacity-50 disabled:pointer-events-none;
 }
 
 /* Card */
 .ts-card {
-  @apply rounded-lg border border-slate-200 bg-white shadow-sm;
+  @apply rounded-xl border border-border bg-card shadow-sm;
 }
 
-/* Status badges — each variant is fully self-contained (no @apply of custom classes) */
+/* Status badges — each variant is fully self-contained */
 .badge         { @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium; }
 
-.badge-success { @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20; }
-.badge-warning { @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium bg-amber-50   text-amber-700   ring-1 ring-inset ring-amber-600/20;  }
-.badge-error   { @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium bg-red-50     text-red-700     ring-1 ring-inset ring-red-600/20;    }
-.badge-info    { @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium bg-blue-50    text-blue-700    ring-1 ring-inset ring-blue-700/20;   }
-.badge-neutral { @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium bg-slate-100  text-slate-600   ring-1 ring-inset ring-slate-500/20;  }
+.badge-success { @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium
+                        bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400
+                        ring-1 ring-inset ring-emerald-600/20; }
+.badge-warning { @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium
+                        bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-400
+                        ring-1 ring-inset ring-amber-600/20; }
+.badge-error   { @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium
+                        bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-400
+                        ring-1 ring-inset ring-red-600/20; }
+.badge-info    { @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium
+                        bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-400
+                        ring-1 ring-inset ring-blue-700/20; }
+.badge-neutral { @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium
+                        bg-muted text-muted-foreground ring-1 ring-inset ring-border; }
 
 /* Page header */
 .page-header {
-  @apply border-b border-slate-200 bg-white px-6 py-4;
+  @apply border-b border-border bg-card px-6 py-4;
 }
 
 /* Section heading */
-.section-title   { @apply text-base font-semibold text-gray-800; }
-.section-caption { @apply text-sm text-gray-500; }
+.section-title   { @apply text-base font-semibold text-foreground; }
+.section-caption { @apply text-sm text-muted-foreground; }
 
 /* Divider */
-.ts-divider { @apply border-t border-slate-200; }
+.ts-divider { @apply border-t border-border; }
 
 /* Form label + input */
-.field-label { @apply block text-sm font-medium text-gray-700 mb-1; }
+.field-label { @apply block text-sm font-medium text-foreground mb-1; }
 .field-input {
-  @apply block w-full rounded-lg border border-slate-300 bg-white px-3 py-2
-         text-sm text-gray-800 placeholder:text-gray-400
+  @apply block w-full rounded-lg border border-border bg-background px-3 py-2
+         text-sm text-foreground placeholder:text-muted-foreground
          transition-colors duration-150
-         focus:border-blue-900 focus:outline-none focus:ring-1 focus:ring-blue-900;
+         focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary;
 }
 
 /* Confidence indicator */
-.confidence-high   { @apply text-emerald-700 bg-emerald-50 rounded px-1.5 py-0.5 text-xs font-medium; }
-.confidence-medium { @apply text-amber-700   bg-amber-50   rounded px-1.5 py-0.5 text-xs font-medium; }
-.confidence-low    { @apply text-red-700     bg-red-50     rounded px-1.5 py-0.5 text-xs font-medium; }
+.confidence-high   { @apply text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 rounded px-1.5 py-0.5 text-xs font-medium; }
+.confidence-medium { @apply text-amber-700   dark:text-amber-400   bg-amber-50   dark:bg-amber-950/60   rounded px-1.5 py-0.5 text-xs font-medium; }
+.confidence-low    { @apply text-red-700     dark:text-red-400     bg-red-50     dark:bg-red-950/60     rounded px-1.5 py-0.5 text-xs font-medium; }
 
 /* Upload dropzone */
 .dropzone {
   @apply flex flex-col items-center justify-center gap-3 rounded-lg
-         border-2 border-dashed border-slate-300 bg-slate-50
+         border-2 border-dashed border-border bg-muted/40
          px-8 py-12 text-center
          transition-colors duration-150
-         hover:border-blue-900 hover:bg-blue-50/40
+         hover:border-primary hover:bg-primary/5
          cursor-pointer;
 }
 
 /* Chat bubble */
 .chat-bubble-user {
-  @apply rounded-2xl rounded-br-sm bg-blue-900 px-4 py-3 text-sm text-white;
+  @apply rounded-2xl rounded-br-sm bg-blue-600 px-4 py-3 text-sm text-white;
 }
 
 .chat-bubble-ai {
-  @apply rounded-2xl rounded-bl-sm border border-slate-200 bg-white px-4 py-3 text-sm text-gray-800 shadow-sm;
+  @apply rounded-2xl rounded-bl-sm border border-border bg-card px-4 py-3 text-sm text-foreground shadow-sm;
+}
+
+/* ─── Financial stat card ────────────────────────────────────────────────── */
+.stat-card {
+  @apply rounded-xl border border-border bg-card shadow-sm flex flex-col gap-1 p-5;
+}
+
+.stat-label  { @apply text-xs font-medium uppercase tracking-wide text-muted-foreground; }
+.stat-value  {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  @apply text-2xl font-bold text-foreground;
+}
+.stat-sub    { @apply text-xs text-muted-foreground; }
+
+/* Positive / negative financial delta */
+.stat-delta-pos { @apply inline-flex items-center gap-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-500; }
+.stat-delta-neg { @apply inline-flex items-center gap-0.5 text-xs font-medium text-red-600 dark:text-red-400; }
+
+/* ─── Tax-breakdown accordion ────────────────────────────────────────────── */
+.accordion-item {
+  @apply overflow-hidden rounded-xl border border-border bg-card transition-colors;
+}
+
+.accordion-trigger {
+  @apply flex w-full items-center justify-between px-5 py-4 text-left transition-colors hover:bg-muted/40;
+}
+
+.accordion-content {
+  @apply border-t border-border px-5 py-4;
+}
+
+/* ─── Step indicator ─────────────────────────────────────────────────────── */
+.step-number {
+  @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold;
+}
+.step-number-active   { @apply bg-blue-600 text-white; }
+.step-number-complete { @apply bg-emerald-500 text-white; }
+.step-number-pending  { @apply bg-muted text-muted-foreground; }
+
+/* ─── Tax bracket visualization bar ─────────────────────────────────────── */
+.bracket-bar {
+  @apply relative h-6 w-full overflow-hidden rounded-full bg-muted;
+}
+
+/* ─── Waterfall flow arrow ───────────────────────────────────────────────── */
+.waterfall-arrow {
+  @apply flex items-center justify-center py-1 text-muted-foreground/30;
 }

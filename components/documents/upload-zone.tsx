@@ -139,7 +139,7 @@ export function UploadZone({ onUploadSuccess }: UploadZoneProps) {
         onKeyDown={(e) => e.key === "Enter" && !isUploading && inputRef.current?.click()}
         className={[
           "dropzone",
-          dragging && !isUploading ? "border-blue-900 bg-blue-50" : "",
+          dragging && !isUploading ? "border-primary bg-primary/5" : "",
           isUploading ? "cursor-not-allowed opacity-60" : "",
         ]
           .filter(Boolean)
@@ -147,25 +147,25 @@ export function UploadZone({ onUploadSuccess }: UploadZoneProps) {
       >
         {isUploading ? (
           <>
-            <Loader2 className="h-8 w-8 animate-spin text-blue-900" />
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
             <div>
-              <p className="text-sm font-medium text-gray-700">
+              <p className="text-sm font-medium text-foreground">
                 Uploading {uploadState.filename}…
               </p>
-              <p className="mt-1 text-xs text-gray-400">Please wait</p>
+              <p className="mt-1 text-xs text-muted-foreground">Please wait</p>
             </div>
           </>
         ) : (
           <>
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-blue-900">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-500/10 text-blue-500 dark:text-blue-400 ring-1 ring-blue-500/20">
               <Upload className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-sm font-medium text-gray-700">
+              <p className="text-sm font-medium text-foreground">
                 Drag &amp; drop a file here, or{" "}
-                <span className="text-blue-900 underline underline-offset-2">browse</span>
+                <span className="text-primary underline underline-offset-2">browse</span>
               </p>
-              <p className="mt-1 text-xs text-gray-400">PDF, JPG, PNG · Max 20 MB</p>
+              <p className="mt-1 text-xs text-muted-foreground">PDF, JPG, PNG · Max 20 MB</p>
             </div>
           </>
         )}
@@ -181,7 +181,7 @@ export function UploadZone({ onUploadSuccess }: UploadZoneProps) {
 
       {/* Success message */}
       {uploadState.status === "success" && (
-        <div className="mt-3 flex items-center gap-2 rounded-lg bg-emerald-50 px-4 py-2.5 text-sm text-emerald-700">
+        <div className="mt-3 flex items-center gap-2 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/50 px-4 py-2.5 text-sm text-emerald-700 dark:text-emerald-400">
           <CheckCircle2 className="h-4 w-4 shrink-0" />
           <span>
             <strong>{uploadState.filename}</strong> uploaded successfully.
@@ -191,13 +191,13 @@ export function UploadZone({ onUploadSuccess }: UploadZoneProps) {
 
       {/* Error message */}
       {uploadState.status === "error" && (
-        <div className="mt-3 flex items-center gap-2 rounded-lg bg-red-50 px-4 py-2.5 text-sm text-red-600">
+        <div className="mt-3 flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
           <AlertCircle className="h-4 w-4 shrink-0" />
           <span className="flex-1">{uploadState.message}</span>
           <button
             onClick={() => setUploadState({ status: "idle" })}
             aria-label="Dismiss error"
-            className="text-red-400 hover:text-red-600"
+            className="opacity-70 hover:opacity-100"
           >
             <X className="h-4 w-4" />
           </button>

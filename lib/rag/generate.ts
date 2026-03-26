@@ -1,5 +1,5 @@
 import { streamText, generateText } from "ai";
-import { getAnthropicClient, CLAUDE_MODEL } from "@/lib/ai/client";
+import { getChatModel } from "@/lib/ai/client";
 import {
   buildChatSystemPrompt,
   buildTitleGenerationPrompt,
@@ -45,14 +45,22 @@ export async function generateRAGResponse(
   // Retrieve relevant knowledge chunks
   const sources = await retrieveRelevantChunks(query, topK);
 
-  // Build the grounding system prompt
-  const systemPrompt = buildChatSystemPrompt(sources);
+  // Cap each chunk's content so the system prompt stays within ~4 000 tokens
+  // (~16 000 chars). With RAG_TOP_K=5, ~3 000 chars per chunk ≈ 750 tokens each
+  // → 5 × 750 + ~500 for instructions = ~4 250 tokens total for the system prompt.
+  const MAX_CHUNK_CHARS = 3_000;
+  const cappedSources = sources.map((s) =>
+    s.content.length > MAX_CHUNK_CHARS
+      ? { ...s, content: s.content.slice(0, MAX_CHUNK_CHARS) + " …[truncated]" }
+      : s,
+  );
 
-  const anthropic = getAnthropicClient();
+  // Build the grounding system prompt
+  const systemPrompt = buildChatSystemPrompt(cappedSources);
 
   // Stream the response
   const stream = streamText({
-    model: anthropic(CLAUDE_MODEL),
+    model: getChatModel(),
     system: systemPrompt,
     messages: [
       ...chatHistory,
@@ -62,12 +70,12 @@ export async function generateRAGResponse(
     temperature: 0.2, // Low temperature for factual tax information
     onFinish: onFinish
       ? async ({ text }) => {
-          await onFinish({ text, sources });
+          await onFinish({ text, sources: cappedSources });
         }
       : undefined,
   });
 
-  return { stream, sources };
+  return { stream, sources: cappedSources };
 }
 
 /**
@@ -75,10 +83,8 @@ export async function generateRAGResponse(
  * Used to auto-label new chat sessions.
  */
 export async function generateChatTitle(firstMessage: string): Promise<string> {
-  const anthropic = getAnthropicClient();
-
   const { text } = await generateText({
-    model: anthropic(CLAUDE_MODEL),
+    model: getChatModel(),
     system: buildTitleGenerationPrompt(),
     prompt: firstMessage,
     maxTokens: 20,

@@ -3,6 +3,8 @@ import path from "path";
 import prisma from "@/lib/db";
 import { generateEmbeddings } from "@/lib/ai/embeddings";
 import { chunkText, extractTitle } from "./chunker";
+import { extractTextFromPdf, titleFromPdfFilename } from "./pdf";
+import { extractTextFromEpub, titleFromEpub } from "./epub";
 
 export interface IngestResult {
   source: string;
@@ -30,9 +32,22 @@ export interface IngestSummary {
  * 6. Update embeddings via raw SQL (Prisma has no native vector type).
  */
 export async function ingestFile(filePath: string): Promise<IngestResult> {
-  const source = path.basename(filePath, path.extname(filePath));
-  const rawContent = fs.readFileSync(filePath, "utf-8");
-  const title = extractTitle(rawContent, source);
+  const ext = path.extname(filePath).toLowerCase();
+  const source = path.basename(filePath, ext);
+
+  let rawContent: string;
+  let title: string;
+
+  if (ext === ".pdf") {
+    rawContent = await extractTextFromPdf(filePath);
+    title = titleFromPdfFilename(filePath);
+  } else if (ext === ".epub") {
+    rawContent = await extractTextFromEpub(filePath);
+    title = await titleFromEpub(filePath);
+  } else {
+    rawContent = fs.readFileSync(filePath, "utf-8");
+    title = extractTitle(rawContent, source);
+  }
 
   // Chunk the content
   const chunks = chunkText(rawContent, {
@@ -46,6 +61,12 @@ export async function ingestFile(filePath: string): Promise<IngestResult> {
   // Generate embeddings for all chunk contents
   const contents = chunks.map((c) => c.content);
   const embeddings = await generateEmbeddings(contents);
+
+  if (!embeddings) {
+    throw new Error(
+      "HUGGINGFACE_API_KEY is not configured. Set it in .env to run ingestion."
+    );
+  }
 
   // Delete existing chunks for this source (idempotent re-ingestion)
   const deleted = await prisma.knowledgeChunk.deleteMany({ where: { source } });
@@ -93,7 +114,7 @@ export async function ingestFile(filePath: string): Promise<IngestResult> {
 export async function ingestKnowledgeDirectory(
   knowledgeDir: string
 ): Promise<IngestSummary> {
-  const supportedExtensions = [".md", ".txt"];
+  const supportedExtensions = [".md", ".txt", ".pdf", ".epub"];
 
   const files = fs
     .readdirSync(knowledgeDir)

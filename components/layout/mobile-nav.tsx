@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { Menu } from "lucide-react";
+import { TaxSenseLogo } from "@/components/branding/taxsense-logo";
 import { UserButton } from "@clerk/nextjs";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import {
   Sheet,
   SheetContent,
@@ -16,65 +17,47 @@ export function MobileNav() {
   const [open, setOpen] = useState(false);
 
   return (
-    <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 lg:hidden">
+    <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card px-4 lg:hidden">
 
-      {/* Hamburger that opens the slide-out nav */}
+      {/* Hamburger */}
       <Sheet open={open} onOpenChange={(v) => setOpen(v)}>
         <SheetTrigger
-          className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-slate-100 hover:text-gray-700"
+          className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           aria-label="Open navigation menu"
         >
           <Menu className="h-5 w-5" />
         </SheetTrigger>
 
-        <SheetContent side="left" className="w-72 p-0">
-          {/* Sheet header — logo */}
-          <div className="flex h-16 items-center border-b border-slate-200 px-5 pt-0">
-            <Link
-              href="/dashboard"
-              onClick={() => setOpen(false)}
-              className="flex items-center gap-2.5"
-            >
-              <Image
-                src="/Logo.png"
-                alt="TaxSense"
-                width={32}
-                height={32}
-                className="object-contain"
-                priority
-              />
-              <span className="text-lg font-bold text-gray-900">TaxSense</span>
+        <SheetContent side="left" className="w-72 border-sidebar-border bg-sidebar p-0">
+          {/* Sheet header */}
+          <div className="flex h-14 items-center border-b border-sidebar-border px-5">
+            <Link href="/dashboard" onClick={() => setOpen(false)} className="flex items-center">
+              <TaxSenseLogo variant="dark" className="text-xl" />
             </Link>
           </div>
 
-          {/* Tax year indicator */}
+          {/* Tax year pill */}
           <div className="px-4 pt-4">
-            <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2.5">
-              <p className="text-xs font-semibold text-blue-900">Tax Year 2025</p>
-              <p className="text-[11px] text-blue-600/70">California · FTB 540</p>
+            <div className="rounded-lg border border-sidebar-border bg-sidebar-accent/60 px-3 py-2.5">
+              <p className="text-xs font-semibold text-sidebar-foreground">Tax Year 2025</p>
+              <p className="text-[11px] text-sidebar-foreground/40">California · FTB 540</p>
             </div>
           </div>
 
-          {/* Nav — passes close callback so tapping a link closes the sheet */}
-          <NavLinks onNavigate={() => setOpen(false)} />
+          <NavLinks onNavigate={() => setOpen(false)} theme="dark" />
         </SheetContent>
       </Sheet>
 
       {/* Centered logo */}
-      <Link href="/dashboard" className="flex items-center gap-2">
-        <Image
-          src="/Logo.png"
-          alt="TaxSense"
-          width={28}
-          height={28}
-          className="object-contain"
-          priority
-        />
-        <span className="font-bold text-gray-900">TaxSense</span>
+      <Link href="/dashboard" className="absolute left-1/2 -translate-x-1/2">
+        <TaxSenseLogo variant="auto" className="text-lg" />
       </Link>
 
-      {/* User avatar */}
-      <UserButton />
+      {/* Right actions */}
+      <div className="flex items-center gap-1">
+        <ThemeToggle />
+        <UserButton />
+      </div>
     </header>
   );
 }

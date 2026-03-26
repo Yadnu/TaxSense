@@ -40,16 +40,16 @@ const SAMPLE_DOCS: DocumentData[] = [
     name: "W2_Employer_2025.pdf",
     type: "W-2",
     fields: [
-      { id: "f1",  label: "Employer Name",             value: "Acme Corporation",      confidence: "high",   fieldCode: "Box c"  },
-      { id: "f2",  label: "Employer EIN",              value: "12-3456789",            confidence: "high",   fieldCode: "Box b"  },
-      { id: "f3",  label: "Employee SSN",              value: "***-**-6789",           confidence: "high",   fieldCode: "Box a"  },
-      { id: "f4",  label: "Wages, Tips, Other Comp.",  value: "$87,450.00",            confidence: "high",   fieldCode: "Box 1"  },
-      { id: "f5",  label: "Federal Income Tax Withheld", value: "$14,320.00",          confidence: "high",   fieldCode: "Box 2"  },
-      { id: "f6",  label: "Social Security Wages",    value: "$87,450.00",            confidence: "medium", fieldCode: "Box 3"  },
-      { id: "f7",  label: "Social Security Tax",      value: "$5,422.00",             confidence: "medium", fieldCode: "Box 4"  },
-      { id: "f8",  label: "Medicare Wages",           value: "$87,450.00",            confidence: "high",   fieldCode: "Box 5"  },
-      { id: "f9",  label: "Medicare Tax",             value: "$1,268.00",             confidence: "high",   fieldCode: "Box 6"  },
-      { id: "f10", label: "State (CA) Income Tax",   value: "$5,820.00",             confidence: "low",    fieldCode: "Box 17" },
+      { id: "f1",  label: "Employer Name",               value: "Acme Corporation",  confidence: "high",   fieldCode: "Box c"  },
+      { id: "f2",  label: "Employer EIN",                value: "12-3456789",        confidence: "high",   fieldCode: "Box b"  },
+      { id: "f3",  label: "Employee SSN",                value: "***-**-6789",       confidence: "high",   fieldCode: "Box a"  },
+      { id: "f4",  label: "Wages, Tips, Other Comp.",    value: "$87,450.00",        confidence: "high",   fieldCode: "Box 1"  },
+      { id: "f5",  label: "Federal Income Tax Withheld", value: "$14,320.00",        confidence: "high",   fieldCode: "Box 2"  },
+      { id: "f6",  label: "Social Security Wages",       value: "$87,450.00",        confidence: "medium", fieldCode: "Box 3"  },
+      { id: "f7",  label: "Social Security Tax",         value: "$5,422.00",         confidence: "medium", fieldCode: "Box 4"  },
+      { id: "f8",  label: "Medicare Wages",              value: "$87,450.00",        confidence: "high",   fieldCode: "Box 5"  },
+      { id: "f9",  label: "Medicare Tax",                value: "$1,268.00",         confidence: "high",   fieldCode: "Box 6"  },
+      { id: "f10", label: "State (CA) Income Tax",       value: "$5,820.00",         confidence: "low",    fieldCode: "Box 17" },
     ],
   },
   {
@@ -57,10 +57,10 @@ const SAMPLE_DOCS: DocumentData[] = [
     name: "1099-NEC_Freelance.pdf",
     type: "1099-NEC",
     fields: [
-      { id: "g1", label: "Payer Name",                  value: "Startup Inc.",         confidence: "high",   fieldCode: "Payer"  },
-      { id: "g2", label: "Payer TIN",                   value: "98-7654321",           confidence: "medium", fieldCode: "TIN"    },
-      { id: "g3", label: "Nonemployee Compensation",    value: "$24,800.00",           confidence: "low",    fieldCode: "Box 1"  },
-      { id: "g4", label: "Federal Income Tax Withheld", value: "$0.00",               confidence: "high",   fieldCode: "Box 4"  },
+      { id: "g1", label: "Payer Name",                  value: "Startup Inc.",  confidence: "high",   fieldCode: "Payer" },
+      { id: "g2", label: "Payer TIN",                   value: "98-7654321",   confidence: "medium", fieldCode: "TIN"   },
+      { id: "g3", label: "Nonemployee Compensation",    value: "$24,800.00",   confidence: "low",    fieldCode: "Box 1" },
+      { id: "g4", label: "Federal Income Tax Withheld", value: "$0.00",        confidence: "high",   fieldCode: "Box 4" },
     ],
   },
 ];
@@ -96,17 +96,17 @@ export default function ExtractedDataPage() {
   return (
     <div className="flex flex-col">
 
-      {/* ── Page header ───────────────────────────────────────────── */}
+      {/* ── Page header ──────────────────────────────────────────────── */}
       <div className="page-header">
-        <h1 className="text-lg font-semibold text-gray-900">Extracted Data Review</h1>
-        <p className="mt-0.5 text-sm text-gray-500">
+        <h1 className="text-lg font-semibold text-foreground">Extracted Data Review</h1>
+        <p className="mt-0.5 text-sm text-muted-foreground">
           Review the data extracted from your documents. Correct any errors before proceeding.
         </p>
       </div>
 
-      <div className="p-6 space-y-5">
+      <div className="space-y-5 p-6">
 
-        {/* ── Document selector ─────────────────────────────────────── */}
+        {/* ── Document selector ────────────────────────────────────── */}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
           <label htmlFor="doc-select" className="field-label mb-0 shrink-0">
             Viewing document:
@@ -124,19 +124,19 @@ export default function ExtractedDataPage() {
                 </option>
               ))}
             </select>
-            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/50" />
           </div>
         </div>
 
         {/* ── Review notice ─────────────────────────────────────────── */}
         {needsReview > 0 && (
-          <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+          <div className="flex items-start gap-3 rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/30 p-4">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500" />
             <div>
-              <p className="text-sm font-medium text-amber-800">
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
                 {needsReview} field{needsReview > 1 ? "s" : ""} need{needsReview === 1 ? "s" : ""} your review
               </p>
-              <p className="text-xs text-amber-700">
+              <p className="text-xs text-amber-700 dark:text-amber-300/80">
                 Medium and low-confidence fields are highlighted below. Click the edit icon to correct them.
               </p>
             </div>
@@ -145,7 +145,7 @@ export default function ExtractedDataPage() {
 
         {/* ── Fields table ──────────────────────────────────────────── */}
         <div className="ts-card overflow-hidden">
-          <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+          <div className="flex items-center justify-between border-b border-border px-5 py-4">
             <div>
               <h2 className="section-title">{selectedDoc.name}</h2>
               <p className="section-caption">{selectedDoc.type} · {docFields.length} fields extracted</p>
@@ -165,7 +165,7 @@ export default function ExtractedDataPage() {
           </div>
 
           {/* Column headers */}
-          <div className="grid grid-cols-[1fr_1fr_auto_auto] gap-4 border-b border-slate-100 bg-slate-50 px-5 py-2.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
+          <div className="grid grid-cols-[1fr_1fr_auto_auto] gap-4 border-b border-border bg-muted/50 px-5 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             <span>Field</span>
             <span>Extracted Value</span>
             <span>Confidence</span>
@@ -179,18 +179,18 @@ export default function ExtractedDataPage() {
             return (
               <div
                 key={field.id}
-                className={`grid grid-cols-[1fr_1fr_auto_auto] items-center gap-4 border-b border-slate-100 px-5 py-3 last:border-0 ${
+                className={`grid grid-cols-[1fr_1fr_auto_auto] items-center gap-4 border-b border-border/60 px-5 py-3.5 last:border-0 transition-colors ${
                   field.confidence === "low"
-                    ? "bg-red-50/40"
+                    ? "bg-red-50/50 dark:bg-red-950/10"
                     : field.confidence === "medium"
-                    ? "bg-amber-50/30"
-                    : ""
+                    ? "bg-amber-50/50 dark:bg-amber-950/10"
+                    : "hover:bg-muted/20"
                 }`}
               >
                 {/* Label */}
                 <div>
-                  <p className="text-sm font-medium text-gray-700">{field.label}</p>
-                  <p className="text-xs text-gray-400">{field.fieldCode}</p>
+                  <p className="text-sm font-medium text-foreground">{field.label}</p>
+                  <p className="text-xs text-muted-foreground/50">{field.fieldCode}</p>
                 </div>
 
                 {/* Value / edit input */}
@@ -201,13 +201,13 @@ export default function ExtractedDataPage() {
                       value={editValue}
                       onChange={(e) => setEditValue(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter") saveEdit();
+                        if (e.key === "Enter")  saveEdit();
                         if (e.key === "Escape") setEditingId(null);
                       }}
                       className="field-input max-w-[200px] py-1.5 text-sm"
                     />
                   ) : (
-                    <p className="text-sm text-gray-800 font-mono">{field.value}</p>
+                    <p className="font-numeric text-sm text-foreground">{field.value}</p>
                   )}
                 </div>
 
@@ -220,14 +220,14 @@ export default function ExtractedDataPage() {
                     <>
                       <button
                         onClick={saveEdit}
-                        className="rounded p-1.5 text-emerald-600 transition-colors hover:bg-emerald-50"
+                        className="rounded p-1.5 text-emerald-600 dark:text-emerald-400 transition-colors hover:bg-emerald-50 dark:hover:bg-emerald-900/30"
                         aria-label="Save"
                       >
                         <Save className="h-3.5 w-3.5" />
                       </button>
                       <button
                         onClick={() => setEditingId(null)}
-                        className="rounded p-1.5 text-gray-400 transition-colors hover:bg-slate-100"
+                        className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-muted"
                         aria-label="Cancel"
                       >
                         <X className="h-3.5 w-3.5" />
@@ -236,7 +236,7 @@ export default function ExtractedDataPage() {
                   ) : (
                     <button
                       onClick={() => startEdit(field)}
-                      className="rounded p-1.5 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-900"
+                      className="rounded p-1.5 text-muted-foreground/40 transition-colors hover:bg-muted hover:text-foreground"
                       aria-label="Edit field"
                     >
                       <Pencil className="h-3.5 w-3.5" />
@@ -249,8 +249,8 @@ export default function ExtractedDataPage() {
         </div>
 
         {/* ── Confidence legend ─────────────────────────────────────── */}
-        <div className="flex items-start gap-2 rounded-lg border border-slate-200 bg-white p-4 text-xs text-gray-500">
-          <Info className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
+        <div className="ts-card flex items-start gap-2 p-4 text-xs text-muted-foreground">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground/50" />
           <div className="flex flex-wrap gap-x-6 gap-y-1">
             <span className="flex items-center gap-1.5">
               <span className="confidence-high">High</span>
@@ -266,6 +266,7 @@ export default function ExtractedDataPage() {
             </span>
           </div>
         </div>
+
       </div>
     </div>
   );

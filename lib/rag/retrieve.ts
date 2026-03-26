@@ -24,9 +24,8 @@ export async function retrieveRelevantChunks(
   topK: number = RAG_TOP_K
 ): Promise<RetrievedChunk[]> {
   const embedding = await generateEmbedding(query);
+  if (!embedding) return []; // No embedding model configured — skip retrieval
 
-  // Build the vector literal string from the embedding array.
-  // Safe: embedding is a number[] from the OpenAI API.
   const vectorStr = `[${embedding.join(",")}]`;
 
   // Use $queryRawUnsafe with a parameterised query. The vector literal is

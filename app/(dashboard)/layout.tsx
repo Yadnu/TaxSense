@@ -13,7 +13,7 @@ export default async function DashboardLayout({
   if (!userId) redirect("/sign-in");
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    <div className="flex min-h-screen bg-background">
 
       {/* Desktop sidebar — hidden on mobile */}
       <Sidebar />
