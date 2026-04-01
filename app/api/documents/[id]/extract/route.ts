@@ -3,7 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { downloadFromS3 } from "@/lib/storage/s3";
 import { mapFieldsFromOCRText } from "@/lib/ocr/field-mapper";
+import { extractTextFromImage } from "@/lib/ocr/tesseract";
 import { isSupportedDocType } from "@/types/extraction";
+import type { OcrEngine } from "@prisma/client";
 
 // ─── POST /api/documents/[id]/extract ────────────────────────────────────────
 // Triggers the OCR + field extraction pipeline for a document.
@@ -54,12 +56,17 @@ export async function POST(
     let rawText = document.rawText ?? "";
 
     if (!rawText) {
-      rawText = await extractRawText(document.s3Key, document.s3Bucket, document.mimeType);
+      const { text, engine } = await extractRawText(
+        document.s3Key,
+        document.s3Bucket,
+        document.mimeType,
+      );
+      rawText = text;
 
       if (rawText) {
         await prisma.document.update({
           where: { id },
-          data: { rawText, ocrEngine: "TESSERACT" },
+          data: { rawText, ocrEngine: engine ?? undefined },
         });
       }
     }
@@ -154,14 +161,17 @@ export async function POST(
 
 /**
  * Downloads a document from S3 and extracts its plain text.
- * Supports PDF files via pdf-parse; images return empty string (OCR not yet
- * implemented — Tesseract / Textract pipeline is a separate module).
+ *
+ * - PDF  → pdf-parse (text extraction, no OCR engine required)
+ * - Image → Tesseract.js (OCR engine: TESSERACT)
+ *
+ * Returns both the extracted text and the OCR engine used (null for PDFs).
  */
 async function extractRawText(
   s3Key: string,
   s3Bucket: string,
-  mimeType: string
-): Promise<string> {
+  mimeType: string,
+): Promise<{ text: string; engine: OcrEngine | null }> {
   try {
     const buffer = await downloadFromS3({ key: s3Key, bucket: s3Bucket });
 
@@ -169,18 +179,23 @@ async function extractRawText(
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const pdfParse = require("pdf-parse") as (buf: Buffer) => Promise<{ text: string }>;
       const data = await pdfParse(buffer);
-      return cleanText(data.text);
+      return { text: cleanPdfText(data.text), engine: null };
     }
 
-    // Images (JPEG/PNG): return empty — full Tesseract OCR is in lib/ocr/tesseract.ts
-    return "";
+    if (mimeType.startsWith("image/")) {
+      const text = await extractTextFromImage(buffer);
+      return { text, engine: "TESSERACT" };
+    }
+
+    console.warn(`[extractRawText] Unsupported MIME type: ${mimeType}`);
+    return { text: "", engine: null };
   } catch (err) {
     console.error("[extractRawText] Failed to download or parse file:", err);
-    return "";
+    return { text: "", engine: null };
   }
 }
 
-function cleanText(raw: string): string {
+function cleanPdfText(raw: string): string {
   return raw
     .replace(/\f/g, "\n")
     .replace(/\uFB01/g, "fi")
