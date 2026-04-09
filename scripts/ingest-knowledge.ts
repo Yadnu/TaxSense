@@ -7,7 +7,7 @@
  *   npm run ingest -- --dry-run                 # Preview chunks without inserting
  *
  * Requirements:
- *   - DATABASE_URL, OPENAI_API_KEY in .env or .env.local
+ *   - DATABASE_URL, HUGGINGFACE_API_KEY in .env or .env.local
  *   - pgvector extension enabled in your PostgreSQL database
  *   - Embedding column must exist on KnowledgeChunk (run: prisma migrate deploy)
  */
@@ -71,6 +71,8 @@ async function main() {
   // Dynamic imports happen AFTER env variables are loaded above.
   const { chunkText, extractTitle } = await import("../lib/rag/chunker");
   const { ingestFile, ingestKnowledgeDirectory } = await import("../lib/rag/ingest");
+  const { extractTextFromPdf, titleFromPdfFilename } = await import("../lib/rag/pdf");
+  const { extractTextFromEpub, titleFromEpub } = await import("../lib/rag/epub");
   const dbModule = await import("../lib/db");
   const db = dbModule.default;
 
@@ -84,13 +86,26 @@ async function main() {
           .readdirSync(KNOWLEDGE_DIR)
           .filter((f) => {
             const ext = path.extname(f).toLowerCase();
-            return (ext === ".md" || ext === ".txt") && f.toLowerCase() !== "readme.md";
+            return [".md", ".txt", ".pdf", ".epub"].includes(ext) && f.toLowerCase() !== "readme.md";
           })
           .map((f) => path.join(KNOWLEDGE_DIR, f));
 
     for (const filePath of files) {
-      const rawContent = fs.readFileSync(filePath, "utf-8");
-      const title = extractTitle(rawContent, path.basename(filePath, ".md"));
+      const ext = path.extname(filePath).toLowerCase();
+      let rawContent: string;
+      let title: string;
+
+      if (ext === ".pdf") {
+        rawContent = await extractTextFromPdf(filePath);
+        title = titleFromPdfFilename(filePath);
+      } else if (ext === ".epub") {
+        rawContent = await extractTextFromEpub(filePath);
+        title = await titleFromEpub(filePath);
+      } else {
+        rawContent = fs.readFileSync(filePath, "utf-8");
+        title = extractTitle(rawContent, path.basename(filePath, ext));
+      }
+
       const chunks = chunkText(rawContent);
 
       console.log(`\n📄 File: ${path.basename(filePath)}`);
