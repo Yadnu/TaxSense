@@ -2,8 +2,7 @@ import { z } from "zod";
 import type { DocumentType } from "@prisma/client";
 
 // ─── Core extracted field result shape ────────────────────────────────────────
-// This mirrors the ExtractedField DB model, used as the return type from
-// the LLM field-mapper and as the input to the DB upsert.
+// This mirrors the ExtractedField DB model (return shape for OCR / AI parsing).
 
 export const ExtractedFieldResultSchema = z.object({
   fieldName: z.string(),
@@ -210,9 +209,10 @@ export function getFieldLabel(fieldName: string, docType: string): string {
   const defs = getFieldDefsForDocType(docType);
   const def = defs.find((d) => d.name === fieldName);
   if (def) return def.label;
-  // Prettify snake_case as fallback
+  // Prettify snake_case or camelCase as fallback
   return fieldName
     .replace(/_/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 

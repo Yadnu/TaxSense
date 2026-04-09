@@ -32,6 +32,9 @@ const serverEnvSchema = z.object({
   // Arcjet (rate limiting) — optional; rate limiting is skipped when absent
   ARCJET_KEY: optionalEnvString,
 
+  // Knowledge ingestion — optional; POST /api/knowledge/ingest uses this bearer token
+  KNOWLEDGE_INGEST_SECRET: optionalEnvString,
+
   // Resend (email)
   RESEND_API_KEY: z.string().min(1, "RESEND_API_KEY is required"),
 

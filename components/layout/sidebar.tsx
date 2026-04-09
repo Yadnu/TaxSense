@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { LogOut } from "lucide-react";
 import { TaxSenseLogo } from "@/components/branding/taxsense-logo";
-import { UserButton, SignOutButton } from "@clerk/nextjs";
+import { SignOutButton } from "@clerk/nextjs";
+import { ClerkUserButton } from "@/components/layout/clerk-user-button";
 import { NavLinks } from "@/components/dashboard/nav-links";
 
 export function Sidebar() {
@@ -31,7 +32,7 @@ export function Sidebar() {
       {/* User + sign out */}
       <div className="border-t border-sidebar-border p-3">
         <div className="mb-1 flex items-center gap-3 rounded-lg px-3 py-2">
-          <UserButton appearance={{ elements: { avatarBox: "h-7 w-7" } }} />
+          <ClerkUserButton appearance={{ elements: { avatarBox: "h-7 w-7" } }} />
           <span className="text-sm font-medium text-sidebar-foreground/50">My Account</span>
         </div>
         <SignOutButton redirectUrl="/">

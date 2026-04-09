@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Menu } from "lucide-react";
 import { TaxSenseLogo } from "@/components/branding/taxsense-logo";
-import { UserButton } from "@clerk/nextjs";
+import { ClerkUserButton } from "@/components/layout/clerk-user-button";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import {
   Sheet,
@@ -56,7 +56,7 @@ export function MobileNav() {
       {/* Right actions */}
       <div className="flex items-center gap-1">
         <ThemeToggle />
-        <UserButton />
+        <ClerkUserButton />
       </div>
     </header>
   );

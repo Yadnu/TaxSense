@@ -10,8 +10,10 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
+  Sparkles,
 } from "lucide-react";
 import type { DocumentType, DocumentStatus } from "@prisma/client";
+import { toast } from "sonner";
 import { DOCUMENT_TYPE_LABELS } from "@/lib/validators/document";
 import { formatFileSize, formatDate } from "@/lib/utils";
 
@@ -52,8 +54,15 @@ interface DocumentCardProps {
 
 export function DocumentCard({ document: doc, onDelete }: DocumentCardProps) {
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [localStatus, setLocalStatus] = useState<DocumentStatus>(doc.status);
+  const [fieldCount, setFieldCount] = useState(doc._count.extractedFields);
 
-  const cfg = STATUS_CONFIG[doc.status];
+  const cfg = STATUS_CONFIG[localStatus];
+  const canExtract =
+    localStatus === "UPLOADED" ||
+    localStatus === "FAILED" ||
+    localStatus === "NEEDS_REVIEW";
 
   async function handleDelete() {
     if (!confirm(`Delete "${doc.originalFilename}"?\n\nThis action cannot be undone.`)) return;
@@ -70,6 +79,37 @@ export function DocumentCard({ document: doc, onDelete }: DocumentCardProps) {
       console.error("[DocumentCard] Delete error:", err);
       alert("Failed to delete document. Please try again.");
       setIsDeleting(false);
+    }
+  }
+
+  async function handleExtract() {
+    setIsExtracting(true);
+    setLocalStatus("PROCESSING");
+
+    try {
+      const res = await fetch(`/api/documents/${doc.id}/extract`, { method: "POST" });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setLocalStatus("FAILED");
+        toast.error("Extraction failed — please try again");
+      } else if (data.success) {
+        const n = Object.keys(data.fields ?? {}).length;
+        toast.success("Extraction complete");
+        if (n > 0) {
+          setLocalStatus("EXTRACTED");
+          setFieldCount(n);
+        } else {
+          setLocalStatus("NEEDS_REVIEW");
+        }
+      } else {
+        setLocalStatus("NEEDS_REVIEW");
+      }
+    } catch {
+      setLocalStatus("FAILED");
+      toast.error("Extraction failed — please try again");
+    } finally {
+      setIsExtracting(false);
     }
   }
 
@@ -98,8 +138,23 @@ export function DocumentCard({ document: doc, onDelete }: DocumentCardProps) {
         {cfg.label}
       </span>
 
+      {/* Extract button — shown when document is ready for extraction */}
+      {canExtract && (
+        <button
+          onClick={handleExtract}
+          disabled={isExtracting}
+          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:opacity-60"
+        >
+          {isExtracting ? (
+            <><Loader2 className="h-3 w-3 animate-spin" />Extracting…</>
+          ) : (
+            <><Sparkles className="h-3 w-3" />{localStatus === "FAILED" ? "Retry" : "Extract"}</>
+          )}
+        </button>
+      )}
+
       {/* Review link — only when fields have been extracted */}
-      {doc.status === "EXTRACTED" && doc._count.extractedFields > 0 && (
+      {localStatus === "EXTRACTED" && fieldCount > 0 && (
         <Link
           href={`/documents/${doc.id}`}
           className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"

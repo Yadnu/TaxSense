@@ -1,22 +1,15 @@
 import { auth } from "@clerk/nextjs/server";
+import type { FieldSource } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { inferOcrDocumentType, runOcrPipeline } from "@/lib/ocr";
 import { downloadFromS3 } from "@/lib/storage/s3";
-import { mapFieldsFromOCRText } from "@/lib/ocr/field-mapper";
-import { extractTextFromImage } from "@/lib/ocr/tesseract";
-import { isSupportedDocType } from "@/types/extraction";
-import type { OcrEngine } from "@prisma/client";
+import { getFieldDefsForDocType } from "@/types/extraction";
 
-// ─── POST /api/documents/[id]/extract ────────────────────────────────────────
-// Triggers the OCR + field extraction pipeline for a document.
-//
-// Pipeline:
-// 1. Fetch document (ownership check).
-// 2. Download from S3, extract plain text (pdf-parse for PDFs).
-// 3. Store raw text on Document.rawText and update status → PROCESSING.
-// 4. Run LLM field extraction via mapFieldsFromOCRText().
-// 5. Persist ExtractedField records (upsert by fieldName).
-// 6. Update Document status → EXTRACTED (or FAILED on error).
+function fieldGroupFor(fieldName: string, documentType: string): string | null {
+  const defs = getFieldDefsForDocType(documentType);
+  return defs.find((d) => d.name === fieldName)?.group ?? null;
+}
 
 export async function POST(
   _req: NextRequest,
@@ -29,7 +22,6 @@ export async function POST(
 
   const { id } = await params;
 
-  // ── 1. Fetch & validate document ownership ──────────────────────────────
   const document = await prisma.document.findFirst({
     where: { id, userId },
   });
@@ -45,162 +37,74 @@ export async function POST(
     );
   }
 
-  // Mark as processing
   await prisma.document.update({
     where: { id },
     data: { status: "PROCESSING" },
   });
 
   try {
-    // ── 2. Obtain raw text (re-use stored rawText or extract from S3) ─────
-    let rawText = document.rawText ?? "";
-
-    if (!rawText) {
-      const { text, engine } = await extractRawText(
-        document.s3Key,
-        document.s3Bucket,
-        document.mimeType,
-      );
-      rawText = text;
-
-      if (rawText) {
-        await prisma.document.update({
-          where: { id },
-          data: { rawText, ocrEngine: engine ?? undefined },
-        });
-      }
-    }
-
-    if (!rawText || rawText.trim().length < 20) {
-      await prisma.document.update({
-        where: { id },
-        data: { status: "FAILED" },
-      });
-      return NextResponse.json(
-        { error: "Could not extract text from this document. Please ensure it is a readable PDF or image." },
-        { status: 422 }
-      );
-    }
-
-    // ── 3. Check document type support ────────────────────────────────────
-    if (!isSupportedDocType(document.documentType)) {
-      // Still store raw text but skip structured extraction
-      await prisma.document.update({
-        where: { id },
-        data: { status: "NEEDS_REVIEW" },
-      });
-      return NextResponse.json({
-        message: "Text extracted but structured field extraction is not supported for this document type.",
-        extractedCount: 0,
-      });
-    }
-
-    // ── 4. LLM field extraction ───────────────────────────────────────────
-    const { fields, success, error: mapError } = await mapFieldsFromOCRText(
-      rawText,
-      document.documentType
-    );
-
-    if (!success || fields.length === 0) {
-      await prisma.document.update({
-        where: { id },
-        data: { status: "NEEDS_REVIEW" },
-      });
-      return NextResponse.json({
-        message: mapError ?? "No fields could be extracted. Manual review required.",
-        extractedCount: 0,
-      });
-    }
-
-    // ── 5. Persist extracted fields ───────────────────────────────────────
-    // Delete existing fields first, then insert fresh results
-    await prisma.extractedField.deleteMany({ where: { documentId: id } });
-
-    await prisma.extractedField.createMany({
-      data: fields.map((f) => ({
-        documentId: id,
-        fieldName: f.fieldName,
-        fieldValue: f.fieldValue,
-        confidence: f.confidence,
-        pageNumber: f.pageNumber ?? null,
-        fieldGroup: f.fieldGroup,
-        source: "LLM_INFERENCE" as const,
-      })),
+    const buffer = await downloadFromS3({
+      key: document.s3Key,
+      bucket: document.s3Bucket,
     });
 
-    // ── 6. Mark document as extracted ─────────────────────────────────────
+    const ocrDocType = inferOcrDocumentType(document.originalFilename, document.documentType);
+
+    const { fields, rawText, usedClaude } = await runOcrPipeline(buffer, id, ocrDocType, {
+      mimeType: document.mimeType,
+    });
+
+    const source: FieldSource = usedClaude ? "LLM_INFERENCE" : "OCR";
+    const confidence = usedClaude ? 0.82 : 0.88;
+
     await prisma.document.update({
       where: { id },
       data: {
-        status: "EXTRACTED",
-        processedAt: new Date(),
+        rawText,
+        ocrEngine: "TESSERACT",
       },
     });
 
-    return NextResponse.json({
-      message: "Extraction complete.",
-      extractedCount: fields.length,
+    await prisma.extractedField.deleteMany({ where: { documentId: id } });
+
+    const entries = Object.entries(fields).filter(([, v]) => v.trim().length > 0);
+    if (entries.length > 0) {
+      await prisma.extractedField.createMany({
+        data: entries.map(([fieldName, fieldValue]) => ({
+          documentId: id,
+          fieldName,
+          fieldValue,
+          confidence,
+          pageNumber: null,
+          fieldGroup: fieldGroupFor(fieldName, document.documentType),
+          source,
+        })),
+      });
+    }
+
+    const status =
+      entries.length === 0 ? ("NEEDS_REVIEW" as const) : ("EXTRACTED" as const);
+
+    await prisma.document.update({
+      where: { id },
+      data: {
+        status,
+        processedAt: entries.length > 0 ? new Date() : undefined,
+      },
     });
+
+    return NextResponse.json({ success: true, fields }, { status: 200 });
   } catch (err) {
     console.error("[POST /api/documents/[id]/extract]", err);
 
-    // Roll back status to FAILED on unexpected error
-    await prisma.document.update({
-      where: { id },
-      data: { status: "FAILED" },
-    }).catch(() => {});
+    await prisma.document
+      .update({
+        where: { id },
+        data: { status: "FAILED" },
+      })
+      .catch(() => {});
 
-    return NextResponse.json(
-      { error: "Extraction failed. Please try again." },
-      { status: 500 }
-    );
+    const message = err instanceof Error ? err.message : "Extraction failed";
+    return NextResponse.json({ error: message }, { status: 422 });
   }
-}
-
-// ─── Internal helpers ─────────────────────────────────────────────────────────
-
-/**
- * Downloads a document from S3 and extracts its plain text.
- *
- * - PDF  → pdf-parse (text extraction, no OCR engine required)
- * - Image → Tesseract.js (OCR engine: TESSERACT)
- *
- * Returns both the extracted text and the OCR engine used (null for PDFs).
- */
-async function extractRawText(
-  s3Key: string,
-  s3Bucket: string,
-  mimeType: string,
-): Promise<{ text: string; engine: OcrEngine | null }> {
-  try {
-    const buffer = await downloadFromS3({ key: s3Key, bucket: s3Bucket });
-
-    if (mimeType === "application/pdf") {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const pdfParse = require("pdf-parse") as (buf: Buffer) => Promise<{ text: string }>;
-      const data = await pdfParse(buffer);
-      return { text: cleanPdfText(data.text), engine: null };
-    }
-
-    if (mimeType.startsWith("image/")) {
-      const text = await extractTextFromImage(buffer);
-      return { text, engine: "TESSERACT" };
-    }
-
-    console.warn(`[extractRawText] Unsupported MIME type: ${mimeType}`);
-    return { text: "", engine: null };
-  } catch (err) {
-    console.error("[extractRawText] Failed to download or parse file:", err);
-    return { text: "", engine: null };
-  }
-}
-
-function cleanPdfText(raw: string): string {
-  return raw
-    .replace(/\f/g, "\n")
-    .replace(/\uFB01/g, "fi")
-    .replace(/\uFB02/g, "fl")
-    .replace(/^\s*\d+\s*$/gm, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
 }

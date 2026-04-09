@@ -83,6 +83,8 @@ const bracketChartData = [
   { name: "37%",  tax: 0     },
 ];
 
+// Reserved for Phase 2 waterfall chart — kept for reference but not yet rendered.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const waterfallData = [
   { label: "Gross Income",    value: 112570, type: "positive" },
   { label: "Adjustments",    value: -9000,  type: "negative"  },
@@ -240,7 +242,7 @@ export default function TaxBreakdownPage() {
   function toggleSection(id: string) {
     setOpenSections((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) { next.delete(id); } else { next.add(id); }
       return next;
     });
   }

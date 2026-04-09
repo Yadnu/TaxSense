@@ -6,7 +6,8 @@ import prisma from "@/lib/db";
 import { generateRAGResponse, generateChatTitle } from "@/lib/rag/generate";
 import { getServerConfig } from "@/lib/config";
 
-let _aj: ReturnType<typeof arcjet> | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _aj: any = null;
 
 function getAj() {
   const key = getServerConfig().ARCJET_KEY;

@@ -17,6 +17,7 @@ import {
   Cpu,
 } from "lucide-react";
 import type { DocumentStatus, DocumentType } from "@prisma/client";
+import { toast } from "sonner";
 import {
   ExtractedFieldsTable,
   type ExtractedFieldData,
@@ -138,14 +139,19 @@ export default function DocumentDetailPage({
       const data = await res.json();
       if (!res.ok) {
         setDocument((prev) => (prev ? { ...prev, status: "FAILED" } : prev));
-        setExtractMessage(data.error ?? "Extraction failed.");
+        const msg = data.error ?? "Extraction failed — please try again";
+        setExtractMessage(msg);
+        toast.error("Extraction failed — please try again");
+      } else if (data.success) {
+        toast.success("Extraction complete");
+        await fetchDocument();
       } else {
-        setExtractMessage(data.message ?? null);
         await fetchDocument();
       }
     } catch {
       setDocument((prev) => (prev ? { ...prev, status: "FAILED" } : prev));
-      setExtractMessage("Extraction failed. Please try again.");
+      setExtractMessage("Extraction failed — please try again.");
+      toast.error("Extraction failed — please try again");
     } finally {
       setIsExtracting(false);
     }
@@ -283,7 +289,9 @@ export default function DocumentDetailPage({
                   {document.ocrEngine && (
                     <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
                       <Cpu className="h-3.5 w-3.5 text-muted-foreground/50" />
-                      {document.ocrEngine === "TEXTRACT" ? "AWS Textract" : "Text extraction"}
+                      {document.ocrEngine === "TESSERACT"
+                        ? "Tesseract OCR"
+                        : "Text extraction"}
                     </span>
                   )}
                 </div>

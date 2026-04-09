@@ -6,8 +6,12 @@ import path from "path";
  * Returns the raw text content suitable for chunking.
  */
 export async function extractTextFromPdf(filePath: string): Promise<string> {
-  // Dynamic import to avoid issues with pdf-parse's require() in ESM contexts
-  const pdfParse = (await import("pdf-parse")).default;
+  // Use require() rather than dynamic import: pdf-parse is a CommonJS module
+  // and its ESM shim does not reliably export a `.default` in all Node versions.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const pdfParse = require("pdf-parse") as (
+    buf: Buffer
+  ) => Promise<{ text: string; numpages: number }>;
   const buffer = fs.readFileSync(filePath);
   const data = await pdfParse(buffer);
   return cleanPdfText(data.text);

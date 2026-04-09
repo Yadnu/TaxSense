@@ -12,6 +12,10 @@ export function ThemeToggle({ className = "" }: ThemeToggleProps) {
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
+  // This single-expression effect is intentional: it marks the component as
+  // mounted after hydration so we can safely read `resolvedTheme` without an
+  // SSR/client mismatch. The eslint rule flags it but this pattern is correct.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setMounted(true), []);
 
   if (!mounted) {
