@@ -6,6 +6,7 @@ import {
 } from "@/lib/ai/prompts/chat-system";
 import { retrieveRelevantChunks, RetrievedChunk } from "./retrieve";
 import { RAG_TOP_K } from "@/lib/ai/prompts/constants";
+import type { ChatLocale } from "@/types/chat";
 
 export interface ChatHistoryMessage {
   role: "user" | "assistant";
@@ -16,6 +17,8 @@ export interface RAGGenerateOptions {
   query: string;
   chatHistory?: ChatHistoryMessage[];
   topK?: number;
+  /** Assistant reply language (prompts + disclaimer). Default \`en\`. */
+  locale?: ChatLocale;
   /** Called when the full streamed response is available. Sources are injected automatically. */
   onFinish?: (event: { text: string; sources: RetrievedChunk[] }) => Promise<void> | void;
 }
@@ -40,7 +43,13 @@ export interface RAGGenerateResult {
 export async function generateRAGResponse(
   options: RAGGenerateOptions
 ): Promise<RAGGenerateResult> {
-  const { query, chatHistory = [], topK = RAG_TOP_K, onFinish } = options;
+  const {
+    query,
+    chatHistory = [],
+    topK = RAG_TOP_K,
+    locale = "en",
+    onFinish,
+  } = options;
 
   // Retrieve relevant knowledge chunks
   const sources = await retrieveRelevantChunks(query, topK);
@@ -56,7 +65,7 @@ export async function generateRAGResponse(
   );
 
   // Build the grounding system prompt
-  const systemPrompt = buildChatSystemPrompt(cappedSources);
+  const systemPrompt = buildChatSystemPrompt(cappedSources, locale);
 
   // Stream the response
   const stream = streamText({
@@ -82,10 +91,13 @@ export async function generateRAGResponse(
  * Generates a short conversation title from the first user message.
  * Used to auto-label new chat sessions.
  */
-export async function generateChatTitle(firstMessage: string): Promise<string> {
+export async function generateChatTitle(
+  firstMessage: string,
+  locale: ChatLocale = "en",
+): Promise<string> {
   const { text } = await generateText({
     model: getChatModel(),
-    system: buildTitleGenerationPrompt(),
+    system: buildTitleGenerationPrompt(locale),
     prompt: firstMessage,
     maxTokens: 20,
   });

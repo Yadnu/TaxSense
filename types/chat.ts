@@ -8,6 +8,17 @@
 
 import type { MessageRole } from "@prisma/client";
 
+// ─── Locale (extend with "hi" when adding Hindi) ─────────────────────────────
+
+/** UI + API chat language. Add `"hi"` here and in Zod/UI when supporting Hindi. */
+export type ChatLocale = "en" | "es";
+
+export const CHAT_LOCALES: readonly ChatLocale[] = ["en", "es"] as const;
+
+export function isChatLocale(value: string): value is ChatLocale {
+  return value === "en" || value === "es";
+}
+
 // ─── Source citations ─────────────────────────────────────────────────────────
 
 /**
@@ -86,6 +97,8 @@ export interface ChatRequestBody {
   sessionId?: string;
   /** AI SDK per-chat UUID (unused server-side but required by the SDK). */
   id?: string;
+  /** Response language for assistant replies and disclaimers. */
+  locale?: ChatLocale;
 }
 
 /**

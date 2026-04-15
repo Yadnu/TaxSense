@@ -38,6 +38,7 @@ const ChatRequestSchema = z.object({
   messages: z.array(MessageSchema).min(1),
   sessionId: z.string().optional(),
   id: z.string().optional(), // AI SDK sends a per-chat UUID; we use our own sessionId
+  locale: z.enum(["en", "es"]).default("en"),
 });
 
 function extractTextContent(content: string | unknown[]): string {
@@ -150,7 +151,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { messages, sessionId: existingSessionId } = parsed.data;
+  const { messages, sessionId: existingSessionId, locale } = parsed.data;
 
   // The last message must be from the user
   const lastMessage = messages[messages.length - 1];
@@ -220,6 +221,7 @@ export async function POST(req: NextRequest) {
     const { stream } = await generateRAGResponse({
       query: userQuery,
       chatHistory,
+      locale,
       onFinish: async ({ text, sources }) => {
         // Persist assistant message — wrapped so a DB failure never
         // propagates into the AI SDK stream and surfaces as a client error.
@@ -244,7 +246,7 @@ export async function POST(req: NextRequest) {
         // Auto-generate a title for newly created sessions
         if (isNewSession) {
           try {
-            const title = await generateChatTitle(userQuery);
+            const title = await generateChatTitle(userQuery, locale);
             await prisma.chatSession.update({
               where: { id: sessionId },
               data: { title },

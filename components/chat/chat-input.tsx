@@ -2,6 +2,17 @@
 
 import { useRef, useEffect } from "react";
 import { ArrowUp, Loader2 } from "lucide-react";
+import type { ChatLocale } from "@/types/chat";
+
+const PLACEHOLDER: Record<ChatLocale, string> = {
+  en: "Ask a tax question…",
+  es: "Haga una pregunta fiscal…",
+};
+
+const FOOTER_HINT: Record<ChatLocale, string> = {
+  en: "Enter to send · Shift+Enter for new line",
+  es: "Enter para enviar · Mayús+Enter para nueva línea",
+};
 
 interface ChatInputProps {
   input: string;
@@ -9,6 +20,8 @@ interface ChatInputProps {
   onInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
   onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
   showDisclaimer?: boolean;
+  /** Affects placeholder and footer copy. Default \`en\`. */
+  locale?: ChatLocale;
 }
 
 export function ChatInput({
@@ -17,6 +30,7 @@ export function ChatInput({
   onInputChange,
   onSubmit,
   showDisclaimer = false,
+  locale = "en",
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -52,7 +66,7 @@ export function ChatInput({
             value={input}
             onChange={onInputChange}
             onKeyDown={handleKeyDown}
-            placeholder="Ask a tax question…"
+            placeholder={PLACEHOLDER[locale]}
             rows={1}
             disabled={isLoading}
             className="flex-1 resize-none bg-transparent py-1.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none disabled:opacity-40"
@@ -80,16 +94,51 @@ export function ChatInput({
 
         <p className="mt-2 text-center text-[11px] text-muted-foreground/40">
           {showDisclaimer ? (
-            <>
-              For informational purposes only · Verify with{" "}
-              <a href="https://www.irs.gov" target="_blank" rel="noopener noreferrer"
-                className="underline underline-offset-2 hover:text-muted-foreground">IRS</a>{" "}
-              and{" "}
-              <a href="https://www.ftb.ca.gov" target="_blank" rel="noopener noreferrer"
-                className="underline underline-offset-2 hover:text-muted-foreground">California FTB</a>
-            </>
+            locale === "es" ? (
+              <>
+                Solo con fines informativos · Verifique en{" "}
+                <a
+                  href="https://www.irs.gov"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline underline-offset-2 hover:text-muted-foreground"
+                >
+                  IRS
+                </a>{" "}
+                y en{" "}
+                <a
+                  href="https://www.ftb.ca.gov"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline underline-offset-2 hover:text-muted-foreground"
+                >
+                  FTB de California
+                </a>
+              </>
+            ) : (
+              <>
+                For informational purposes only · Verify with{" "}
+                <a
+                  href="https://www.irs.gov"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline underline-offset-2 hover:text-muted-foreground"
+                >
+                  IRS
+                </a>{" "}
+                and{" "}
+                <a
+                  href="https://www.ftb.ca.gov"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline underline-offset-2 hover:text-muted-foreground"
+                >
+                  California FTB
+                </a>
+              </>
+            )
           ) : (
-            <>Enter to send · Shift+Enter for new line</>
+            <>{FOOTER_HINT[locale]}</>
           )}
         </p>
       </form>
