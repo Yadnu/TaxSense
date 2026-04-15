@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { MessageSquare, SquarePen } from "lucide-react";
+import type { ChatLocale } from "@/types/chat";
 
 export interface ChatSessionSummary {
   id: string;
@@ -15,19 +16,52 @@ interface ChatHistoryProps {
   onSelectSession: (session: ChatSessionSummary) => void;
   onNewChat: () => void;
   refreshKey?: number;
+  locale?: ChatLocale;
 }
 
-function groupByDate(sessions: ChatSessionSummary[]) {
+const DATE_GROUP_LABELS: Record<
+  ChatLocale,
+  [string, string, string, string]
+> = {
+  en: ["Today", "Yesterday", "Last 7 days", "Older"],
+  es: ["Hoy", "Ayer", "Últimos 7 días", "Anteriores"],
+};
+
+const HISTORY_COPY: Record<
+  ChatLocale,
+  {
+    newChat: string;
+    emptyTitle: string;
+    emptySubtitle: string;
+    untitled: string;
+  }
+> = {
+  en: {
+    newChat: "New conversation",
+    emptyTitle: "No conversations yet",
+    emptySubtitle: "Start chatting to see history",
+    untitled: "Untitled conversation",
+  },
+  es: {
+    newChat: "Nueva conversación",
+    emptyTitle: "Aún no hay conversaciones",
+    emptySubtitle: "Empiece a chatear para ver el historial",
+    untitled: "Conversación sin título",
+  },
+};
+
+function groupByDate(sessions: ChatSessionSummary[], locale: ChatLocale) {
   const now = new Date();
   const today = new Date(now); today.setHours(0, 0, 0, 0);
   const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
   const sevenDaysAgo = new Date(today); sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
+  const [l0, l1, l2, l3] = DATE_GROUP_LABELS[locale];
   const groups: { label: string; items: ChatSessionSummary[] }[] = [
-    { label: "Today", items: [] },
-    { label: "Yesterday", items: [] },
-    { label: "Last 7 days", items: [] },
-    { label: "Older", items: [] },
+    { label: l0, items: [] },
+    { label: l1, items: [] },
+    { label: l2, items: [] },
+    { label: l3, items: [] },
   ];
 
   for (const s of sessions) {
@@ -46,6 +80,7 @@ export function ChatHistory({
   onSelectSession,
   onNewChat,
   refreshKey = 0,
+  locale = "en",
 }: ChatHistoryProps) {
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,7 +98,8 @@ export function ChatHistory({
     fetchSessions();
   }, [fetchSessions, refreshKey]);
 
-  const groups = groupByDate(sessions);
+  const groups = groupByDate(sessions, locale);
+  const copy = HISTORY_COPY[locale];
 
   return (
     <div className="flex h-full flex-col">
@@ -75,7 +111,7 @@ export function ChatHistory({
           className="flex w-full items-center gap-2.5 rounded-xl border border-border px-3 py-2.5 text-sm font-medium text-foreground transition-all hover:bg-muted active:scale-[0.98]"
         >
           <SquarePen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          New conversation
+          {copy.newChat}
         </button>
       </div>
 
@@ -96,8 +132,8 @@ export function ChatHistory({
               <MessageSquare className="h-4 w-4 text-muted-foreground/50" />
             </div>
             <div>
-              <p className="text-xs font-medium text-muted-foreground">No conversations yet</p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground/50">Start chatting to see history</p>
+              <p className="text-xs font-medium text-muted-foreground">{copy.emptyTitle}</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground/50">{copy.emptySubtitle}</p>
             </div>
           </div>
         ) : (
@@ -121,7 +157,7 @@ export function ChatHistory({
                   >
                     <MessageSquare className={`h-3 w-3 shrink-0 ${isActive ? "opacity-60" : "opacity-30 group-hover:opacity-50"}`} />
                     <span className="truncate text-[13px]">
-                      {session.title ?? "Untitled conversation"}
+                      {session.title ?? copy.untitled}
                     </span>
                   </button>
                 );
