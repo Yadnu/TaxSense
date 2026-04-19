@@ -183,6 +183,85 @@ export const FORM_1099_FIELD_DEFS: FieldDef[] = [
   { name: "state_payer_id",                  group: "withholding",     label: "State Payer ID" },
 ];
 
+// ─── Form 1098 (mortgage interest; common layout) ───────────────────────────
+
+export const FORM_1098_FIELD_DEFS: FieldDef[] = [
+  { name: "lender_name",                     group: "lender_info",     label: "Lender Name" },
+  { name: "lender_address",                  group: "lender_info",     label: "Lender Address" },
+  { name: "lender_phone",                    group: "lender_info",     label: "Lender Phone" },
+  { name: "lender_tin",                      group: "lender_info",     label: "Lender TIN / EIN" },
+  { name: "borrower_name",                   group: "borrower_info",   label: "Borrower Name" },
+  { name: "borrower_address",                group: "borrower_info",   label: "Borrower Address" },
+  { name: "borrower_tin",                    group: "borrower_info",   label: "Borrower SSN / TIN" },
+  { name: "account_number",                  group: "loan_detail",     label: "Account Number" },
+  { name: "mortgage_interest_received",      group: "loan_detail",     label: "Mortgage Interest Received",          boxNumber: "1" },
+  { name: "outstanding_mortgage_principal",  group: "loan_detail",     label: "Outstanding Mortgage Principal",    boxNumber: "2" },
+  { name: "mortgage_origination_date",       group: "loan_detail",     label: "Mortgage Origination Date",         boxNumber: "3" },
+  { name: "refund_of_overpaid_interest",     group: "loan_detail",     label: "Refund of Overpaid Interest",       boxNumber: "4" },
+  { name: "mortgage_insurance_premiums",     group: "loan_detail",     label: "Mortgage Insurance Premiums",       boxNumber: "5" },
+  { name: "points_paid_on_purchase",           group: "loan_detail",     label: "Points Paid on Purchase",           boxNumber: "6" },
+  { name: "property_address",                group: "loan_detail",     label: "Property Address",                  boxNumber: "8" },
+  { name: "tax_year",                        group: "loan_detail",     label: "Tax Year" },
+];
+
+// ─── Form 1095 (health coverage; A/B/C variants) ─────────────────────────────
+
+export const FORM_1095_FIELD_DEFS: FieldDef[] = [
+  { name: "form_subtype",                    group: "issuer_info",     label: "Form Variant (A / B / C)" },
+  { name: "issuer_name",                     group: "issuer_info",     label: "Issuer / Employer / Insurance Name" },
+  { name: "issuer_ein",                      group: "issuer_info",     label: "Issuer EIN" },
+  { name: "recipient_name",                  group: "recipient_info",  label: "Recipient / Employee Name" },
+  { name: "recipient_ssn",                   group: "recipient_info",  label: "Recipient SSN" },
+  { name: "policy_number",                   group: "coverage",        label: "Policy Number" },
+  { name: "plan_name",                       group: "coverage",        label: "Plan Name" },
+  { name: "coverage_start",                  group: "coverage",        label: "Coverage Start Date" },
+  { name: "coverage_end",                    group: "coverage",        label: "Coverage End Date" },
+  { name: "annual_premium_total",            group: "coverage",        label: "Annual Premium or Total Premium" },
+  { name: "covered_individuals_summary",     group: "coverage",        label: "Covered Individuals (summary)" },
+];
+
+// ─── Receipt ─────────────────────────────────────────────────────────────────
+
+export const RECEIPT_FIELD_DEFS: FieldDef[] = [
+  { name: "merchant_name",                   group: "merchant_info",   label: "Merchant Name" },
+  { name: "merchant_address",                group: "merchant_info",   label: "Merchant Address" },
+  { name: "transaction_date",                group: "merchant_info",   label: "Transaction Date" },
+  { name: "receipt_id",                      group: "merchant_info",   label: "Receipt / Order ID" },
+  { name: "currency",                        group: "totals",          label: "Currency" },
+  { name: "subtotal",                        group: "totals",          label: "Subtotal" },
+  { name: "sales_tax",                       group: "totals",          label: "Sales Tax" },
+  { name: "tip",                             group: "totals",          label: "Tip" },
+  { name: "total",                           group: "totals",          label: "Total" },
+  { name: "payment_method",                  group: "payment",         label: "Payment Method" },
+  { name: "items_description",               group: "payment",         label: "Line Items (summary text)" },
+];
+
+// ─── Bank statement ──────────────────────────────────────────────────────────
+
+export const BANK_STATEMENT_FIELD_DEFS: FieldDef[] = [
+  { name: "financial_institution",           group: "account",         label: "Financial Institution" },
+  { name: "account_holder_name",             group: "account",         label: "Account Holder Name" },
+  { name: "account_type",                    group: "account",         label: "Account Type" },
+  { name: "account_last_four",               group: "account",         label: "Account Number (last 4)" },
+  { name: "statement_start_date",            group: "statement_period", label: "Statement Start Date" },
+  { name: "statement_end_date",              group: "statement_period", label: "Statement End Date" },
+  { name: "beginning_balance",               group: "balances",        label: "Beginning Balance" },
+  { name: "ending_balance",                  group: "balances",        label: "Ending Balance" },
+  { name: "total_credits",                   group: "activity",        label: "Total Deposits / Credits" },
+  { name: "total_debits",                    group: "activity",        label: "Total Withdrawals / Debits" },
+];
+
+// ─── Other / unknown layout ──────────────────────────────────────────────────
+
+export const OTHER_FIELD_DEFS: FieldDef[] = [
+  { name: "document_title",                  group: "summary",         label: "Document Title" },
+  { name: "issuer_or_party",                 group: "summary",         label: "Issuer or Primary Party" },
+  { name: "primary_date",                    group: "summary",         label: "Primary Date" },
+  { name: "total_amount",                    group: "summary",         label: "Total Amount (if any)" },
+  { name: "topic_summary",                   group: "summary",         label: "One-line Summary" },
+  { name: "extracted_notes",                 group: "summary",         label: "Visible Content Notes" },
+];
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Returns the field definitions for a given document type. */
@@ -197,6 +276,11 @@ export function getFieldDefsForDocType(docType: string): FieldDef[] {
     case "FORM_1099_DIV":
     case "FORM_1099_MISC":
     case "FORM_1099_R":   return FORM_1099_FIELD_DEFS;
+    case "FORM_1098":     return FORM_1098_FIELD_DEFS;
+    case "FORM_1095":     return FORM_1095_FIELD_DEFS;
+    case "RECEIPT":       return RECEIPT_FIELD_DEFS;
+    case "BANK_STATEMENT": return BANK_STATEMENT_FIELD_DEFS;
+    case "OTHER":         return OTHER_FIELD_DEFS;
     default:              return [];
   }
 }
@@ -233,6 +317,19 @@ export const FIELD_GROUP_LABELS: Record<string, string> = {
   deductions:        "Deductions",
   payer_info:        "Payer Information",
   recipient_info:    "Recipient Information",
+  lender_info:       "Lender Information",
+  borrower_info:     "Borrower Information",
+  loan_detail:       "Loan / Mortgage Details",
+  issuer_info:       "Issuer Information",
+  coverage:          "Coverage",
+  merchant_info:     "Merchant",
+  totals:            "Totals",
+  payment:           "Payment",
+  account:           "Account",
+  statement_period:  "Statement Period",
+  balances:          "Balances",
+  activity:          "Activity",
+  summary:           "Summary",
   other:             "Other",
 };
 
@@ -241,16 +338,29 @@ export const FIELD_GROUP_ORDER: Record<string, number> = {
   employer_info:     1,
   payer_info:        1,
   taxpayer_info:     1,
+  lender_info:       1,
+  issuer_info:       1,
+  merchant_info:     1,
+  account:           1,
+  summary:           1,
   employee_info:     2,
   recipient_info:    2,
+  borrower_info:     2,
   visa_residency:    3,
+  loan_detail:       3,
+  coverage:          3,
+  totals:            4,
+  balances:          4,
   income:            4,
   adjustments:       5,
   deductions:        5,
   tax_and_credits:   6,
   payments:          7,
   withholding:       7,
+  payment:           7,
+  activity:          7,
   state_local:       8,
+  statement_period:  8,
   refund_or_balance: 9,
   other:             10,
 };
@@ -265,7 +375,12 @@ export type SupportedDocType =
   | "FORM_1099_INT"
   | "FORM_1099_DIV"
   | "FORM_1099_MISC"
-  | "FORM_1099_R";
+  | "FORM_1099_R"
+  | "FORM_1098"
+  | "FORM_1095"
+  | "RECEIPT"
+  | "BANK_STATEMENT"
+  | "OTHER";
 
 export function isSupportedDocType(docType: DocumentType): boolean {
   const supported: DocumentType[] = [
@@ -278,6 +393,11 @@ export function isSupportedDocType(docType: DocumentType): boolean {
     "FORM_1099_DIV",
     "FORM_1099_MISC",
     "FORM_1099_R",
+    "FORM_1098",
+    "FORM_1095",
+    "RECEIPT",
+    "BANK_STATEMENT",
+    "OTHER",
   ];
   return supported.includes(docType);
 }
