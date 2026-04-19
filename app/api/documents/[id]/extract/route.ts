@@ -2,7 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import type { FieldSource } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { inferOcrDocumentType, runOcrPipeline } from "@/lib/ocr";
+import { runOcrPipeline } from "@/lib/ocr";
 import { downloadFromS3 } from "@/lib/storage/s3";
 import { getFieldDefsForDocType } from "@/types/extraction";
 
@@ -48,9 +48,7 @@ export async function POST(
       bucket: document.s3Bucket,
     });
 
-    const ocrDocType = inferOcrDocumentType(document.originalFilename, document.documentType);
-
-    const { fields, rawText, usedClaude } = await runOcrPipeline(buffer, id, ocrDocType, {
+    const { fields, rawText, usedClaude } = await runOcrPipeline(buffer, id, document.documentType, {
       mimeType: document.mimeType,
     });
 
@@ -61,7 +59,7 @@ export async function POST(
       where: { id },
       data: {
         rawText,
-        ocrEngine: "TESSERACT",
+        ocrEngine: null,
       },
     });
 
@@ -76,7 +74,7 @@ export async function POST(
           fieldValue,
           confidence,
           pageNumber: null,
-          fieldGroup: fieldGroupFor(fieldName, document.documentType),
+          fieldGroup: fieldGroupFor(fieldName, document.documentType) ?? "other",
           source,
         })),
       });
