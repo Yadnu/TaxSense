@@ -77,9 +77,10 @@ model Document {
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 
-  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  taxYear         TaxYear?         @relation(fields: [taxYearId], references: [id], onDelete: SetNull)
-  extractedFields ExtractedField[]
+  user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  taxYear              TaxYear?              @relation(fields: [taxYearId], references: [id], onDelete: SetNull)
+  extractedFields      ExtractedField[]
+  taxComputationResult TaxComputationResult?
 
   @@index([userId])
   @@index([userId, status])
@@ -106,6 +107,22 @@ model ExtractedField {
 
   @@index([documentId])
   @@index([documentId, fieldGroup])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TaxComputationResult (persisted output of the tax computation engine)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model TaxComputationResult {
+  id         String   @id @default(cuid())
+  documentId String   @unique
+  summary    Json
+  computedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
