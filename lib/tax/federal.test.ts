@@ -110,9 +110,11 @@ describe('computeSelfEmploymentTax', () => {
     expect(result.deductiblePortion).toBe(expectedDeductible);
   });
 
-  it('deductible portion is exactly half of SE tax', () => {
+  it('deductible portion is round2(selfEmploymentTax × 0.5)', () => {
     const result = computeSelfEmploymentTax(100_000);
-    expect(result.deductiblePortion).toBeCloseTo(result.selfEmploymentTax * 0.5, 2);
+    // Both values are independently rounded to 2 decimal places by the implementation
+    const expected = Math.round(result.selfEmploymentTax * 0.5 * 100) / 100;
+    expect(result.deductiblePortion).toBe(expected);
   });
 });
 
