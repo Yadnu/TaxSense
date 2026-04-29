@@ -8,10 +8,9 @@ import {
   MapPin,
   Receipt,
   BadgeCheck,
-  Minus,
   ChevronRight,
 } from "lucide-react";
-import type { TaxSummary, BracketResult } from "@/lib/tax/types";
+import type { TaxResult } from "@/lib/tax/types";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -26,10 +25,6 @@ function fmt(n: number, abs = false): string {
 
 function fmtPct(n: number): string {
   return `${n.toFixed(2)}%`;
-}
-
-function fmtRate(r: number): string {
-  return `${(r * 100).toFixed(0)}%`;
 }
 
 const STATE_NAMES: Record<string, string> = {
@@ -159,23 +154,19 @@ function RefundOwedCallout({
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 interface TaxSummaryPanelProps {
-  summary: TaxSummary;
+  summary: TaxResult;
   stateCode?: string;
 }
 
 export function TaxSummaryPanel({ summary, stateCode }: TaxSummaryPanelProps) {
-  const stateName = stateCode
-    ? (STATE_NAMES[stateCode.toUpperCase()] ?? stateCode.toUpperCase())
+  const resolvedStateCode = stateCode ?? summary.state.state;
+  const stateName = resolvedStateCode
+    ? (STATE_NAMES[resolvedStateCode.toUpperCase()] ?? resolvedStateCode.toUpperCase())
     : "State";
 
-  const isOwed = summary.totalRefundOrOwed < 0;
-  const federalIsOwed = summary.federalRefundOrOwed < 0;
-  const stateIsOwed = summary.stateRefundOrOwed < 0;
-
-  // Only show brackets that have taxable income
-  const activeBrackets = summary.federalTaxBrackets.filter(
-    (b: BracketResult) => b.taxableIncome > 0,
-  );
+  const isOwed         = summary.summary.totalRefundOrOwed < 0;
+  const federalIsOwed  = summary.federal.refundOrOwed < 0;
+  const stateIsOwed    = summary.state.refundOrOwed < 0;
 
   return (
     <div className="space-y-4">
@@ -197,10 +188,10 @@ export function TaxSummaryPanel({ summary, stateCode }: TaxSummaryPanelProps) {
             <p
               className={`font-numeric mt-0.5 text-4xl font-bold tabular-nums ${isOwed ? "text-red-700 dark:text-red-400" : "text-emerald-700 dark:text-emerald-400"}`}
             >
-              {fmt(summary.totalRefundOrOwed, true)}
+              {fmt(summary.summary.totalRefundOrOwed, true)}
             </p>
             <p className="mt-1.5 text-xs text-muted-foreground">
-              Federal + {stateName} combined · Tax year {summary.taxYear}
+              Federal + {stateName} combined · Tax year 2026
             </p>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-1 sm:text-right">
@@ -209,7 +200,7 @@ export function TaxSummaryPanel({ summary, stateCode }: TaxSummaryPanelProps) {
                 Effective Federal Rate
               </p>
               <p className="font-numeric text-lg font-bold text-foreground">
-                {fmtPct(summary.effectiveFederalRate)}
+                {fmtPct(summary.summary.effectiveFederalRate)}
               </p>
             </div>
             <div>
@@ -217,7 +208,7 @@ export function TaxSummaryPanel({ summary, stateCode }: TaxSummaryPanelProps) {
                 Effective State Rate
               </p>
               <p className="font-numeric text-lg font-bold text-foreground">
-                {fmtPct(summary.effectiveStateRate)}
+                {fmtPct(summary.summary.effectiveStateRate)}
               </p>
             </div>
           </div>
@@ -229,25 +220,25 @@ export function TaxSummaryPanel({ summary, stateCode }: TaxSummaryPanelProps) {
         {[
           {
             label: "Gross Income",
-            value: fmt(summary.grossIncome),
+            value: fmt(summary.federal.grossIncome),
             Icon: DollarSign,
             color: "text-blue-500 bg-blue-500/10",
           },
           {
-            label: "Taxable Income",
-            value: fmt(summary.taxableIncome),
+            label: "Federal Taxable Income",
+            value: fmt(summary.federal.taxableIncome),
             Icon: Receipt,
             color: "text-amber-500 bg-amber-500/10",
           },
           {
             label: "Total Liability",
-            value: fmt(summary.totalTaxLiability),
+            value: fmt(summary.summary.totalTaxOwed),
             Icon: TrendingUp,
             color: "text-rose-500 bg-rose-500/10",
           },
           {
             label: "Total Withheld",
-            value: fmt(summary.totalWithheld),
+            value: fmt(summary.summary.totalWithheld),
             Icon: BadgeCheck,
             color: "text-emerald-500 bg-emerald-500/10",
           },
@@ -268,162 +259,68 @@ export function TaxSummaryPanel({ summary, stateCode }: TaxSummaryPanelProps) {
         ))}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        {/* ── Income Summary ────────────────────────────────────────────── */}
-        <SectionCard title="Income Summary" icon={DollarSign}>
-          <div className="space-y-0.5">
-            <DataRow label="Gross Income" value={fmt(summary.grossIncome)} />
-            <DataRow
-              label="Adjusted Gross Income (AGI)"
-              value={fmt(summary.adjustedGrossIncome)}
-            />
-            <DataRow
-              label="Taxable Income"
-              value={fmt(summary.taxableIncome)}
-              bold
-              separator
-            />
-          </div>
-        </SectionCard>
-
-        {/* ── Deductions ────────────────────────────────────────────────── */}
-        <SectionCard title="Deductions" icon={Minus}>
-          <div className="mb-3 flex items-center gap-2">
-            <span
-              className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                summary.deductionType === "standard"
-                  ? "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300"
-                  : "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300"
-              }`}
-            >
-              {summary.deductionType === "standard" ? "Standard" : "Itemized"}
-            </span>
-            <span className="text-xs text-muted-foreground">deduction applied</span>
-          </div>
-          <div className="space-y-0.5">
-            <DataRow
-              label={
-                summary.deductionType === "standard"
-                  ? "Standard Deduction"
-                  : "Itemized Deductions"
-              }
-              value={fmt(summary.deductionAmount)}
-              bold
-            />
-            <DataRow
-              label="AGI after deduction"
-              value={fmt(summary.adjustedGrossIncome - summary.deductionAmount)}
-              sub="= Taxable Income"
-            />
-          </div>
-        </SectionCard>
-      </div>
-
-      {/* ── Federal Tax ───────────────────────────────────────────────── */}
+      {/* ── Federal Income Tax ────────────────────────────────────────── */}
       <SectionCard title="Federal Income Tax" icon={Receipt}>
-        {activeBrackets.length > 0 && (
-          <div className="mb-4 overflow-hidden rounded-xl border border-border">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/40">
-                  <th className="py-2 pl-4 pr-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Rate
-                  </th>
-                  <th className="px-2 py-2 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Income in Bracket
-                  </th>
-                  <th className="py-2 pl-2 pr-4 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Tax
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/50">
-                {activeBrackets.map((b: BracketResult, i: number) => (
-                  <tr key={i} className="hover:bg-muted/20 transition-colors">
-                    <td className="py-2 pl-4 pr-2">
-                      <span className="inline-flex items-center gap-1 font-numeric font-semibold text-foreground">
-                        <ChevronRight className="h-3 w-3 text-muted-foreground/50" />
-                        {fmtRate(b.rate)}
-                      </span>
-                    </td>
-                    <td className="px-2 py-2 text-right font-numeric tabular-nums text-muted-foreground">
-                      {fmt(b.taxableIncome)}
-                    </td>
-                    <td className="py-2 pl-2 pr-4 text-right font-numeric font-semibold tabular-nums text-foreground">
-                      {fmt(b.taxAmount)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t border-border bg-muted/30">
-                  <td colSpan={2} className="py-2 pl-4 pr-2 text-sm font-semibold text-foreground">
-                    Total Federal Tax
-                  </td>
-                  <td className="py-2 pl-2 pr-4 text-right font-numeric font-bold tabular-nums text-foreground">
-                    {fmt(summary.federalTaxBeforeCredits)}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        )}
-
         <div className="space-y-0.5">
           <DataRow
-            label="Federal Tax (before credits)"
-            value={fmt(summary.federalTaxBeforeCredits)}
+            label="Gross Income"
+            value={fmt(summary.federal.grossIncome)}
           />
-          {summary.selfEmploymentTax > 0 && (
-            <DataRow
-              label="Self-Employment Tax"
-              value={fmt(summary.selfEmploymentTax)}
-              sub="15.3% on net SE income × 0.9235"
-            />
-          )}
-          {summary.totalCredits > 0 && (
-            <DataRow
-              label="Credits Applied"
-              value={`(${fmt(summary.totalCredits)})`}
-            />
-          )}
           <DataRow
-            label="Federal Tax After Credits"
-            value={fmt(summary.federalTaxAfterCredits)}
+            label="Federal Taxable Income"
+            value={fmt(summary.federal.taxableIncome)}
+            sub="After standard deduction ($15,000 single / $30,000 MFJ)"
+          />
+          <DataRow
+            label="Federal Tax Owed"
+            value={fmt(summary.federal.taxOwed)}
             bold
             separator
           />
           <DataRow
             label="Federal Tax Withheld"
-            value={fmt(summary.federalTaxWithheld)}
+            value={fmt(summary.federal.withheld)}
           />
         </div>
         <RefundOwedCallout
-          amount={summary.federalRefundOrOwed}
+          amount={summary.federal.refundOrOwed}
           label={federalIsOwed ? "Federal Amount Owed" : "Federal Refund"}
         />
       </SectionCard>
 
       {/* ── FICA ─────────────────────────────────────────────────────── */}
-      {(summary.socialSecurityTaxWithheld > 0 ||
-        summary.medicareTaxWithheld > 0) && (
-        <SectionCard title="FICA Withholding" icon={BadgeCheck}>
+      {(summary.fica.socialSecurityWithheld > 0 || summary.fica.medicareWithheld > 0) && (
+        <SectionCard title="FICA" icon={BadgeCheck}>
           <div className="space-y-0.5">
             <DataRow
+              label="Social Security Owed"
+              value={fmt(summary.fica.socialSecurityOwed)}
+              sub="6.2% up to $176,100 wage base"
+            />
+            <DataRow
               label="Social Security Withheld"
-              value={fmt(summary.socialSecurityTaxWithheld)}
-              sub="6.2% up to wage base"
+              value={fmt(summary.fica.socialSecurityWithheld)}
+            />
+            <DataRow
+              label="SS Refund / Owed"
+              value={fmt(summary.fica.socialSecurityRefundOrOwed, true)}
+              highlight={summary.fica.socialSecurityRefundOrOwed >= 0 ? "refund" : "owed"}
+              bold
+              separator
+            />
+            <DataRow
+              label="Medicare Owed"
+              value={fmt(summary.fica.medicareOwed)}
+              sub="1.45% + 0.9% above threshold"
             />
             <DataRow
               label="Medicare Withheld"
-              value={fmt(summary.medicareTaxWithheld)}
-              sub="1.45% on all wages"
+              value={fmt(summary.fica.medicareWithheld)}
             />
             <DataRow
-              label="Total FICA Withheld"
-              value={fmt(
-                summary.socialSecurityTaxWithheld + summary.medicareTaxWithheld,
-              )}
+              label="Medicare Refund / Owed"
+              value={fmt(summary.fica.medicareRefundOrOwed, true)}
+              highlight={summary.fica.medicareRefundOrOwed >= 0 ? "refund" : "owed"}
               bold
               separator
             />
@@ -436,45 +333,62 @@ export function TaxSummaryPanel({ summary, stateCode }: TaxSummaryPanelProps) {
         <div className="space-y-0.5">
           <DataRow
             label="State Taxable Income"
-            value={fmt(summary.stateTaxableIncome)}
+            value={fmt(summary.state.taxableIncome)}
+            sub={resolvedStateCode === "CA" ? "After CA standard deduction ($5,540 single)" : undefined}
           />
           <DataRow
-            label="State Tax Rate"
-            value={fmtPct(summary.stateTaxRate * 100)}
-            sub="Flat effective rate (v1)"
-          />
-          <DataRow
-            label="State Tax Liability"
-            value={fmt(summary.stateTaxLiability)}
+            label="State Income Tax Owed"
+            value={fmt(summary.state.taxOwed)}
             bold
-            separator
           />
+          {summary.state.sdiOwed > 0 && (
+            <DataRow
+              label="SDI (State Disability Insurance)"
+              value={fmt(summary.state.sdiOwed)}
+              sub="0.9% on all wages — no cap"
+            />
+          )}
           <DataRow
             label="State Tax Withheld"
-            value={fmt(summary.stateTaxWithheld)}
+            value={fmt(summary.state.withheld)}
+            separator
           />
         </div>
-        <RefundOwedCallout
-          amount={summary.stateRefundOrOwed}
-          label={stateIsOwed ? "State Amount Owed" : "State Refund"}
-        />
+        {summary.state.taxOwed > 0 || summary.state.withheld > 0 ? (
+          <RefundOwedCallout
+            amount={summary.state.refundOrOwed}
+            label={stateIsOwed ? "State Amount Owed" : "State Refund"}
+          />
+        ) : (
+          <p className="mt-3 text-sm text-muted-foreground">
+            Progressive state brackets for {stateName} are not yet available. Federal result above is complete.
+          </p>
+        )}
       </SectionCard>
 
       {/* ── Combined Summary ──────────────────────────────────────────── */}
       <SectionCard title="Combined Summary" icon={Percent}>
         <div className="space-y-0.5">
-          <DataRow label="Federal Tax Liability" value={fmt(summary.federalTaxAfterCredits)} />
-          <DataRow label="State Tax Liability" value={fmt(summary.stateTaxLiability)} />
+          <DataRow label="Federal Tax Owed"  value={fmt(summary.federal.taxOwed)} />
           <DataRow
-            label="Total Tax Liability"
-            value={fmt(summary.totalTaxLiability)}
+            label="FICA Owed"
+            value={fmt(summary.fica.socialSecurityOwed + summary.fica.medicareOwed)}
+            sub="Social Security + Medicare"
+          />
+          <DataRow label="State Tax Owed"    value={fmt(summary.state.taxOwed)} />
+          {summary.state.sdiOwed > 0 && (
+            <DataRow label="SDI Owed"          value={fmt(summary.state.sdiOwed)} />
+          )}
+          <DataRow
+            label="Total Tax Owed"
+            value={fmt(summary.summary.totalTaxOwed)}
             bold
             separator
           />
-          <DataRow label="Total Withheld" value={fmt(summary.totalWithheld)} />
+          <DataRow label="Total Withheld"    value={fmt(summary.summary.totalWithheld)} />
           <DataRow
             label={isOwed ? "Total Amount Owed" : "Total Refund"}
-            value={fmt(summary.totalRefundOrOwed, true)}
+            value={fmt(summary.summary.totalRefundOrOwed, true)}
             bold
             separator
             highlight={isOwed ? "owed" : "refund"}
@@ -487,7 +401,7 @@ export function TaxSummaryPanel({ summary, stateCode }: TaxSummaryPanelProps) {
               Effective Federal Rate
             </p>
             <p className="font-numeric mt-0.5 text-xl font-bold text-foreground">
-              {fmtPct(summary.effectiveFederalRate)}
+              {fmtPct(summary.summary.effectiveFederalRate)}
             </p>
           </div>
           <div className="rounded-xl bg-muted/40 p-3 text-center">
@@ -495,7 +409,7 @@ export function TaxSummaryPanel({ summary, stateCode }: TaxSummaryPanelProps) {
               Effective State Rate
             </p>
             <p className="font-numeric mt-0.5 text-xl font-bold text-foreground">
-              {fmtPct(summary.effectiveStateRate)}
+              {fmtPct(summary.summary.effectiveStateRate)}
             </p>
           </div>
         </div>
@@ -506,6 +420,15 @@ export function TaxSummaryPanel({ summary, stateCode }: TaxSummaryPanelProps) {
             Estimated figures only. Consult a licensed tax professional before filing.
           </p>
         </div>
+      </SectionCard>
+
+      {/* ── Per-bracket breakdown ─────────────────────────────────────── */}
+      <SectionCard title="Federal Bracket Breakdown" icon={ChevronRight}>
+        <p className="text-sm text-muted-foreground">
+          Progressive bracket detail is computed but not exposed in the current engine output.
+          Federal taxable income of {fmt(summary.federal.taxableIncome)} produces{" "}
+          <span className="font-semibold text-foreground">{fmt(summary.federal.taxOwed)}</span> in federal income tax.
+        </p>
       </SectionCard>
     </div>
   );

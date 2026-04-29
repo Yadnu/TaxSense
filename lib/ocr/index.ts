@@ -1,7 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { DocumentType } from "@prisma/client";
 import {
+  buildDocumentTypeDetectionPrompt,
   buildVisionExtractionPrompt,
+  parseDetectedDocumentType,
   parseVisionModelJson,
   visionMediaBlock,
 } from "@/lib/ocr/vision";
@@ -21,11 +23,37 @@ export async function runOcrPipeline(
 
   const base64 = fileBuffer.toString("base64");
   const mediaBlock = visionMediaBlock(base64, mimeType);
-  const promptText = buildVisionExtractionPrompt(documentType);
+
+  // Step 1: Detect document type from the file content
+  const detectionResponse = await client.messages.create({
+    model: "claude-opus-4-20250514",
+    max_tokens: 64,
+    temperature: 0,
+    messages: [
+      {
+        role: "user",
+        content: [mediaBlock, { type: "text", text: buildDocumentTypeDetectionPrompt() }],
+      },
+    ],
+  });
+
+  const detectionRaw =
+    detectionResponse.content
+      .filter((b) => b.type === "text")
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .map((b: any) => b.text as string)
+      .join("") ?? "";
+
+  const detectedType = parseDetectedDocumentType(detectionRaw);
+  console.info("[OCR] Detected type:", detectedType, "| User-selected:", documentType);
+
+  // Step 2: Extract fields using the detected type's strict schema
+  const promptText = buildVisionExtractionPrompt(detectedType);
 
   const response = await client.messages.create({
     model: "claude-opus-4-20250514",
     max_tokens: 8192,
+    temperature: 0,
     messages: [
       {
         role: "user",

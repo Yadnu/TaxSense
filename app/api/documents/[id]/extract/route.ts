@@ -52,6 +52,13 @@ export async function POST(
       mimeType: document.mimeType,
     });
 
+    // Tax year is always 2026 — override any value the model may have returned
+    for (const key of Object.keys(fields)) {
+      if (key === "tax_year" || key === "taxYear") {
+        fields[key] = "2026";
+      }
+    }
+
     const source: FieldSource = usedClaude ? "LLM_INFERENCE" : "OCR";
     const confidence = usedClaude ? 0.82 : 0.88;
 

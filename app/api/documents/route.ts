@@ -1,5 +1,5 @@
 import arcjet, { tokenBucket } from "@arcjet/next";
-import { auth } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { uploadToS3, buildS3Key, deleteFromS3 } from "@/lib/storage/s3";
@@ -159,6 +159,16 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Persist document record ────────────────────────────────────────────────
+
+  const clerkUser = await currentUser();
+  await prisma.user.upsert({
+    where: { id: userId },
+    update: {},
+    create: {
+      id: userId,
+      email: clerkUser?.emailAddresses[0]?.emailAddress ?? "",
+    },
+  });
 
   let document;
   try {

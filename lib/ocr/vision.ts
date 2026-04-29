@@ -35,35 +35,124 @@ export function visionMediaBlock(base64: string, mimeType: string): ContentBlock
   };
 }
 
-export function buildVisionExtractionPrompt(documentType: DocumentType): string {
-  const label = DOCUMENT_TYPE_LABELS[documentType];
-  const defs = getFieldDefsForDocType(documentType);
-  const formHints = getFormSpecificInstructions(documentType).trim();
+// ─── Step 1: Document type detection ─────────────────────────────────────────
 
-  const keySection =
-    defs.length > 0
-      ? `Use these snake_case JSON keys when the document contains that information (omit a key if not applicable):
-${defs.map((d) => d.name).join(", ")}
+const DETECTABLE_TYPES = [
+  "W2",
+  "FORM_1099_NEC",
+  "FORM_1099_INT",
+  "FORM_1099_DIV",
+  "FORM_1099_MISC",
+  "FORM_1099_R",
+  "FORM_1040",
+  "FORM_1040_NR",
+  "FORM_1098",
+  "FORM_1095",
+  "RECEIPT",
+  "BANK_STATEMENT",
+  "OTHER",
+] as const;
 
-Each key maps to this human meaning for your reference:
-${defs.map((d) => `  - ${d.name}: ${d.label}`).join("\n")}`
-      : `Use descriptive snake_case keys for visible label/value pairs. Do not invent data.`;
+/**
+ * First-pass prompt asking the model to identify the document type only.
+ * Returns a tiny JSON payload — use max_tokens: 64 for this call.
+ */
+export function buildDocumentTypeDetectionPrompt(): string {
+  return `Examine this tax document and identify its type.
 
-  return `You are extracting structured data from a scanned or PDF document.
+Respond with ONLY this JSON object:
+{"documentType": "<TYPE>"}
 
-Document type (user-selected): ${label} [${documentType}]
+<TYPE> must be exactly one of:
+"W2", "FORM_1099_NEC", "FORM_1099_INT", "FORM_1099_DIV", "FORM_1099_MISC",
+"FORM_1099_R", "FORM_1040", "FORM_1040_NR", "FORM_1098", "FORM_1095",
+"RECEIPT", "BANK_STATEMENT", "OTHER"
 
-${keySection}
-${formHints ? `\n${formHints}\n` : ""}
-GLOBAL RULES:
-- Return ONLY one JSON object. Keys must be snake_case; values must be strings.
-- Omit keys that do not apply to this document. Use "" only when the field exists on the form but is visibly blank.
-- Do not guess or hallucinate values not visible on the document.
-- Strip $ and commas from dollar amounts (e.g. 12345.67). Preserve SSN/EIN/TIN formatting as printed.
-- Return raw JSON only — no markdown, no code fences, no commentary.`;
+Return only valid JSON matching the schema above. No explanation, no markdown, no extra fields.`;
 }
 
-/** Parses model output into a flat string record (coerces non-strings). */
+/** Parses the detection response and returns a valid DocumentType (falls back to "OTHER"). */
+export function parseDetectedDocumentType(raw: string): DocumentType {
+  try {
+    const cleaned = stripJsonFence(raw).trim();
+    const parsed = JSON.parse(cleaned) as { documentType?: string };
+    if (parsed.documentType && (DETECTABLE_TYPES as readonly string[]).includes(parsed.documentType)) {
+      return parsed.documentType as DocumentType;
+    }
+  } catch {
+    // fall through to default
+  }
+  return "OTHER" as DocumentType;
+}
+
+// ─── Step 2: Strict per-type schema templates ─────────────────────────────────
+
+/**
+ * Returns the strict JSON schema template for the given document type.
+ * W-2 uses the camelCase field names required by the extraction spec.
+ * All other types use the existing snake_case field definitions.
+ * Every field in the template is null — the model must fill them all in.
+ * tax_year is excluded from all schemas; it is always hardcoded to 2026.
+ */
+function buildStrictSchemaTemplate(documentType: DocumentType): Record<string, string | null> {
+  if (documentType === "W2") {
+    return {
+      documentType: "W2",
+      employerEIN: null,
+      employerName: null,
+      employeeSSN: null,
+      wagesBox1: null,
+      federalWithheldBox2: null,
+      socialSecurityWagesBox3: null,
+      socialSecurityWithheldBox4: null,
+      medicareWagesBox5: null,
+      medicareWithheldBox6: null,
+      stateBox15: null,
+      stateWagesBox16: null,
+      stateWithheldBox17: null,
+    };
+  }
+
+  const defs = getFieldDefsForDocType(documentType);
+  const schema: Record<string, string | null> = { documentType };
+  for (const d of defs) {
+    // tax_year is always 2026 — never read from the document
+    if (d.name !== "tax_year") {
+      schema[d.name] = null;
+    }
+  }
+  return schema;
+}
+
+// ─── Step 2: Extraction prompt ────────────────────────────────────────────────
+
+export function buildVisionExtractionPrompt(documentType: DocumentType): string {
+  const label = DOCUMENT_TYPE_LABELS[documentType] ?? documentType.replace(/_/g, " ");
+  const schema = buildStrictSchemaTemplate(documentType);
+  const schemaJson = JSON.stringify(schema, null, 2);
+  const formHints = getFormSpecificInstructions(documentType).trim();
+
+  return `You are extracting structured data from a tax document.
+
+Document type: ${label} [${documentType}]
+
+Return a JSON object with EXACTLY the following fields. Set any field not found in the document to null. Do not add, rename, or omit any fields.
+
+${schemaJson}
+
+EXTRACTION RULES:
+- Return ALL fields listed in the schema above, even if the value is null.
+- Strip $ signs and commas from dollar amounts (e.g. "$12,345.67" → 12345.67).
+- Preserve SSN and EIN formatting as printed (e.g. "123-45-6789").
+- Do not guess or hallucinate values not visible in the document.
+- Tax year is always 2026 — do not read or return any tax year value from the document.
+${formHints ? `\n${formHints}` : ""}
+Return only valid JSON matching the schema above. No explanation, no markdown, no extra fields.`;
+}
+
+// ─── JSON parser ──────────────────────────────────────────────────────────────
+
+/** Parses model output into a flat string record (coerces non-strings; skips nulls). */
 export function parseVisionModelJson(raw: string): Record<string, string> {
   const cleaned = stripJsonFence(raw).replace(/```json|```/g, "").trim();
   const fields = JSON.parse(cleaned) as Record<string, unknown>;

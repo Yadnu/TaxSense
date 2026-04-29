@@ -1,23 +1,36 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { computeTaxSummary } from "@/lib/tax/engine";
-import type { FilingStatus } from "@/lib/tax/types";
-import type { TaxInput } from "@/lib/tax/types";
+import { computeTax } from "@/lib/tax/engine";
+import type { FilingStatus, TaxInput } from "@/lib/tax/types";
 
-// Maps Prisma FilingStatus enum values (SCREAMING_SNAKE_CASE) to engine values (lowercase)
+// Maps incoming filing status strings (Prisma enum or old snake_case) → new camelCase
 const FILING_STATUS_MAP: Record<string, FilingStatus> = {
-  SINGLE:                      'single',
-  MARRIED_FILING_JOINTLY:      'married_filing_jointly',
-  MARRIED_FILING_SEPARATELY:   'married_filing_separately',
-  HEAD_OF_HOUSEHOLD:           'head_of_household',
-  QUALIFYING_SURVIVING_SPOUSE: 'married_filing_jointly', // closest equivalent
-  // lowercase pass-through (already in engine format)
-  single:                      'single',
-  married_filing_jointly:      'married_filing_jointly',
-  married_filing_separately:   'married_filing_separately',
-  head_of_household:           'head_of_household',
+  // Prisma enum values
+  SINGLE:                      "single",
+  MARRIED_FILING_JOINTLY:      "marriedFilingJointly",
+  MARRIED_FILING_SEPARATELY:   "marriedFilingSeparately",
+  HEAD_OF_HOUSEHOLD:           "headOfHousehold",
+  QUALIFYING_SURVIVING_SPOUSE: "marriedFilingJointly",
+  // Old snake_case pass-through (from page.tsx filing status selector)
+  single:                      "single",
+  married_filing_jointly:      "marriedFilingJointly",
+  married_filing_separately:   "marriedFilingSeparately",
+  head_of_household:           "headOfHousehold",
+  // New camelCase pass-through
+  marriedFilingJointly:        "marriedFilingJointly",
+  marriedFilingSeparately:     "marriedFilingSeparately",
+  headOfHousehold:             "headOfHousehold",
 };
+
+function parseNum(v: string | undefined): number {
+  if (!v) return 0;
+  return parseFloat(v.replace(/[$,\s]/g, "")) || 0;
+}
+
+function get(rawFields: Record<string, string>, ...keys: string[]): string | undefined {
+  return keys.reduce<string | undefined>((acc, k) => acc ?? rawFields[k], undefined);
+}
 
 export async function POST(req: NextRequest) {
   const { userId } = await auth();
@@ -28,7 +41,6 @@ export async function POST(req: NextRequest) {
   let body: {
     documentId: string;
     filingStatus: string;
-    overrides?: Partial<TaxInput>;
   };
 
   try {
@@ -37,16 +49,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { documentId, filingStatus: filingStatusRaw, overrides } = body;
+  const { documentId, filingStatus: filingStatusRaw } = body;
 
   if (!documentId || typeof documentId !== "string") {
     return NextResponse.json({ error: "documentId is required" }, { status: 400 });
   }
 
-  const filingStatus: FilingStatus = FILING_STATUS_MAP[filingStatusRaw] ?? 'single';
+  const filingStatus: FilingStatus = FILING_STATUS_MAP[filingStatusRaw] ?? "single";
 
   try {
-    // Verify document belongs to the authenticated user
     const document = await prisma.document.findFirst({
       where: { id: documentId, userId },
       select: { id: true, status: true },
@@ -56,13 +67,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Document not found" }, { status: 404 });
     }
 
-    // Fetch all extracted fields for this document
     const extractedFields = await prisma.extractedField.findMany({
       where: { documentId },
       select: { fieldName: true, fieldValue: true },
     });
 
-    // Convert ExtractedField rows to Record<string, string>
     const rawFields: Record<string, string> = {};
     for (const field of extractedFields) {
       if (field.fieldValue !== null) {
@@ -70,30 +79,46 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Run the tax computation engine (pure, synchronous)
-    const summary = computeTaxSummary(rawFields, filingStatus, overrides);
+    // Build structured TaxInput from extracted fields.
+    // Checks new camelCase names first, falls back to legacy snake_case names.
+    const taxInput: TaxInput = {
+      wagesBox1: parseNum(
+        get(rawFields, "wagesBox1", "wages_tips_other_compensation", "wages_tips_other"),
+      ),
+      federalWithheldBox2: parseNum(
+        get(rawFields, "federalWithheldBox2", "federal_income_tax_withheld", "federal_tax_withheld"),
+      ),
+      socialSecurityWithheldBox4: parseNum(
+        get(rawFields, "socialSecurityWithheldBox4", "social_security_tax_withheld"),
+      ),
+      medicareWithheldBox6: parseNum(
+        get(rawFields, "medicareWithheldBox6", "medicare_tax_withheld"),
+      ),
+      stateWithheldBox17: parseNum(
+        get(rawFields, "stateWithheldBox17", "state_income_tax", "state_tax_withheld"),
+      ),
+      state: (
+        get(rawFields, "stateBox15", "state", "state_code", "employer_state") ?? "CA"
+      ).trim().toUpperCase().slice(0, 2),
+      filingStatus,
+    };
 
-    // Extract the resolved state code from raw fields for the UI
-    const stateCode =
-      (rawFields.state ?? rawFields.state_code ?? rawFields.employer_state ?? '')
-        .trim()
-        .toUpperCase()
-        .slice(0, 2) || 'CA';
+    const result = computeTax(taxInput);
+    const stateCode = result.state.state;
 
-    // Upsert the computed summary against the document
     await prisma.taxComputationResult.upsert({
       where: { documentId },
       create: {
         documentId,
-        summary: summary as object,
+        summary: result as object,
       },
       update: {
-        summary: summary as object,
+        summary: result as object,
         updatedAt: new Date(),
       },
     });
 
-    return NextResponse.json({ success: true, summary, stateCode }, { status: 200 });
+    return NextResponse.json({ success: true, summary: result, stateCode }, { status: 200 });
   } catch (err) {
     console.error("[POST /api/tax/compute]", err);
     const message = err instanceof Error ? err.message : "Tax computation failed";

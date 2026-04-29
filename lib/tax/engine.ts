@@ -1,135 +1,118 @@
-import type { FilingStatus, TaxInput, TaxSummary } from './types';
-import { normalizeFields } from './normalizer';
-import { computeDeductions, computeStudentLoanDeduction } from './deductions';
-import { computeFederalTax, computeSelfEmploymentTax, computeAdditionalMedicareTax } from './federal';
-import { computeCredits } from './credits';
-import { computeStateTax } from './state';
-import { STUDENT_LOAN_PHASE_OUT_START, STUDENT_LOAN_PHASE_OUT_RANGE } from './constants';
+import type { TaxInput, TaxResult } from "./types";
+import { computeFederalIncomeTax, computeFICA } from "./federal";
+import { computeStateTax } from "./state";
+
+export { computeFederalIncomeTax, computeFICA } from "./federal";
+export { computeCAStateTax, computeStateTax } from "./state";
+export { applyBrackets } from "./federal";
+export type { FilingStatus, TaxInput, TaxResult } from "./types";
 
 /**
- * Orchestrates all tax computation steps and returns a complete TaxSummary.
- * All computations are pure and synchronous — no async, no API calls.
+ * Main tax computation entry point.
+ * Accepts a structured TaxInput (from extracted W-2 fields) and returns
+ * a fully computed TaxResult for tax year 2026.
  */
-export function computeTaxSummary(
-  rawFields: Record<string, string>,
-  filingStatus: FilingStatus,
-  overrides?: Partial<TaxInput>,
-): TaxSummary {
-  // Step 1: Normalize raw extracted fields into typed TaxInput
-  const input = normalizeFields(rawFields, filingStatus, overrides);
+export function computeTax(input: TaxInput): TaxResult {
+  const {
+    wagesBox1,
+    federalWithheldBox2,
+    socialSecurityWithheldBox4,
+    medicareWithheldBox6,
+    stateWithheldBox17,
+    state,
+    filingStatus,
+  } = input;
 
-  // Step 2: Gross income
-  const grossIncome = round2(
-    input.wagesTipsOther +
-    input.selfEmploymentIncome +
-    input.interestIncome +
-    input.ordinaryDividends,
+  // ── Federal income tax ───────────────────────────────────────────────────
+
+  const { taxableIncome: federalTaxableIncome, federalTax } =
+    computeFederalIncomeTax(wagesBox1, filingStatus);
+
+  const federalRefundOrOwed = parseFloat(
+    (federalWithheldBox2 - federalTax).toFixed(2),
   );
 
-  // Step 3: Self-employment tax
-  const { selfEmploymentTax, deductiblePortion } = computeSelfEmploymentTax(input.selfEmploymentIncome);
+  // ── FICA ─────────────────────────────────────────────────────────────────
 
-  // Step 4a: Tentative AGI (without student loan deduction) for phase-out calculation
-  const tentativeAGI = round2(grossIncome - deductiblePortion);
+  const { socialSecurityTax, medicareTax } = computeFICA(wagesBox1, filingStatus);
 
-  // Step 4b: Student loan deduction with AGI-based phase-out
-  const phaseOutStart = STUDENT_LOAN_PHASE_OUT_START[filingStatus];
-  const phaseOutEnd = phaseOutStart + STUDENT_LOAN_PHASE_OUT_RANGE;
-  const studentLoanDeduction = computeStudentLoanDeduction(
-    input.studentLoanInterestPaid,
-    tentativeAGI,
-    phaseOutStart,
-    phaseOutEnd,
+  const ssRefundOrOwed = parseFloat(
+    (socialSecurityWithheldBox4 - socialSecurityTax).toFixed(2),
+  );
+  const medicareRefundOrOwed = parseFloat(
+    (medicareWithheldBox6 - medicareTax).toFixed(2),
   );
 
-  // Step 4c: Final AGI
-  const adjustedGrossIncome = round2(tentativeAGI - studentLoanDeduction);
+  // ── State tax ─────────────────────────────────────────────────────────────
 
-  // Step 5: Deductions (standard vs itemized)
-  // Pass overridden input so useItemizedDeductions is respected
-  const { type: deductionType, amount: deductionAmount } = computeDeductions(input);
-
-  // Step 6: Taxable income
-  const taxableIncome = round2(Math.max(0, adjustedGrossIncome - deductionAmount));
-
-  // Step 7: Federal income tax (progressive brackets)
-  const { brackets: federalTaxBrackets, totalTax: federalTaxBeforeCreditsBase } = computeFederalTax(
-    taxableIncome,
-    input.filingStatus,
+  const { stateTaxableIncome, stateTax, sdiTax } = computeStateTax(
+    wagesBox1,
+    filingStatus,
+    state,
   );
 
-  // Step 8: Additional Medicare tax
-  const additionalMedicare = computeAdditionalMedicareTax(input.wagesTipsOther, input.filingStatus);
-
-  // Step 9: Credits
-  const totalCredits = Math.min(
-    computeCredits(input, adjustedGrossIncome),
-    federalTaxBeforeCreditsBase,
+  const stateRefundOrOwed = parseFloat(
+    (stateWithheldBox17 - stateTax).toFixed(2),
   );
 
-  const federalTaxBeforeCredits = federalTaxBeforeCreditsBase;
+  // ── Summary ───────────────────────────────────────────────────────────────
 
-  // Step 10: Federal tax after credits + SE tax + additional Medicare
-  const federalTaxAfterCredits = round2(
-    Math.max(0, federalTaxBeforeCredits - totalCredits) +
-    selfEmploymentTax +
-    additionalMedicare,
+  const totalTaxOwed = parseFloat(
+    (federalTax + socialSecurityTax + medicareTax + stateTax + sdiTax).toFixed(2),
   );
-
-  // Step 11: Federal refund / owed (positive = refund, negative = owed)
-  const federalRefundOrOwed = round2(input.federalTaxWithheld - federalTaxAfterCredits);
-
-  // Step 12: State tax
-  const { rate: stateTaxRate, liability: stateTaxLiability } = computeStateTax(
-    taxableIncome,
-    input.state,
+  const totalWithheld = parseFloat(
+    (
+      federalWithheldBox2 +
+      socialSecurityWithheldBox4 +
+      medicareWithheldBox6 +
+      stateWithheldBox17
+    ).toFixed(2),
   );
-  const stateRefundOrOwed = round2(input.stateTaxWithheld - stateTaxLiability);
+  const totalRefundOrOwed = parseFloat((totalWithheld - totalTaxOwed).toFixed(2));
 
-  // Step 13: Effective rates (as percentages)
-  const effectiveFederalRate = grossIncome > 0
-    ? round2((federalTaxAfterCredits / grossIncome) * 100)
-    : 0;
-  const effectiveStateRate = grossIncome > 0
-    ? round2((stateTaxLiability / grossIncome) * 100)
-    : 0;
+  const effectiveFederalRate =
+    wagesBox1 > 0
+      ? parseFloat(((federalTax / wagesBox1) * 100).toFixed(2))
+      : 0;
+  const effectiveStateRate =
+    wagesBox1 > 0
+      ? parseFloat((((stateTax + sdiTax) / wagesBox1) * 100).toFixed(2))
+      : 0;
 
-  // Step 14: Totals
-  const totalTaxLiability = round2(federalTaxAfterCredits + stateTaxLiability);
-  const totalWithheld = round2(input.federalTaxWithheld + input.stateTaxWithheld);
-  const totalRefundOrOwed = round2(totalWithheld - totalTaxLiability);
-
-  // Step 15: Assemble and return TaxSummary
-  return {
-    taxYear: 2026,
-    filingStatus: input.filingStatus,
-    grossIncome,
-    adjustedGrossIncome,
-    deductionType,
-    deductionAmount,
-    taxableIncome,
-    federalTaxBrackets,
-    federalTaxBeforeCredits: round2(federalTaxBeforeCredits),
-    totalCredits: round2(totalCredits),
-    federalTaxAfterCredits,
-    federalTaxWithheld: round2(input.federalTaxWithheld),
-    federalRefundOrOwed,
-    selfEmploymentTax,
-    socialSecurityTaxWithheld: round2(input.socialSecurityTaxWithheld),
-    medicareTaxWithheld: round2(input.medicareTaxWithheld),
-    stateTaxableIncome: taxableIncome,
-    stateTaxRate,
-    stateTaxLiability,
-    stateTaxWithheld: round2(input.stateTaxWithheld),
-    stateRefundOrOwed,
-    effectiveFederalRate,
-    effectiveStateRate,
-    totalTaxLiability,
-    totalWithheld,
-    totalRefundOrOwed,
+  const result: TaxResult = {
+    federal: {
+      grossIncome: wagesBox1,
+      taxableIncome: federalTaxableIncome,
+      taxOwed: federalTax,
+      withheld: federalWithheldBox2,
+      refundOrOwed: federalRefundOrOwed,
+    },
+    fica: {
+      socialSecurityOwed: socialSecurityTax,
+      socialSecurityWithheld: socialSecurityWithheldBox4,
+      socialSecurityRefundOrOwed: ssRefundOrOwed,
+      medicareOwed: medicareTax,
+      medicareWithheld: medicareWithheldBox6,
+      medicareRefundOrOwed,
+    },
+    state: {
+      state,
+      taxableIncome: stateTaxableIncome,
+      taxOwed: stateTax,
+      sdiOwed: sdiTax,
+      withheld: stateWithheldBox17,
+      refundOrOwed: stateRefundOrOwed,
+    },
+    summary: {
+      totalTaxOwed,
+      totalWithheld,
+      totalRefundOrOwed,
+      effectiveFederalRate,
+      effectiveStateRate,
+    },
   };
-}
 
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
+  console.log("TAX ENGINE RESULT:", JSON.stringify(result, null, 2));
+
+  return result;
 }

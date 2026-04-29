@@ -1,156 +1,119 @@
-import { describe, it, expect } from 'vitest';
-import {
-  computeFederalTax,
-  computeSelfEmploymentTax,
-  computeAdditionalMedicareTax,
-} from './federal';
+import { describe, it, expect } from "vitest";
+import { computeFederalIncomeTax, computeFICA } from "./federal";
 
-// ─── computeFederalTax ────────────────────────────────────────────────────────
+// ─── computeFederalIncomeTax ──────────────────────────────────────────────────
+// Standard deduction is applied first: single = $15,000, MFJ = $30,000, HoH = $22,500
 
-describe('computeFederalTax', () => {
-  it('returns zero tax for $0 income (single)', () => {
-    const result = computeFederalTax(0, 'single');
-    expect(result.totalTax).toBe(0);
-    result.brackets.forEach((b) => {
-      expect(b.taxableIncome).toBe(0);
-      expect(b.taxAmount).toBe(0);
-    });
+describe("computeFederalIncomeTax", () => {
+  it("returns zero tax when gross income is at or below the standard deduction (single)", () => {
+    const { taxableIncome, federalTax } = computeFederalIncomeTax(15000, "single");
+    expect(taxableIncome).toBe(0);
+    expect(federalTax).toBe(0);
   });
 
-  it('taxes income within the first bracket only (single)', () => {
-    // $10,000 is entirely in the 10% bracket (max 11,925)
-    const result = computeFederalTax(10_000, 'single');
-    expect(result.totalTax).toBe(1_000);
-    expect(result.brackets[0].rate).toBe(0.10);
-    expect(result.brackets[0].taxableIncome).toBe(10_000);
-    expect(result.brackets[0].taxAmount).toBe(1_000);
+  it("taxes income in the first bracket only — single, gross $25,000", () => {
+    // taxable = 25000 - 15000 = 10000, entirely in 10% bracket (max 11925)
+    const { taxableIncome, federalTax } = computeFederalIncomeTax(25000, "single");
+    expect(taxableIncome).toBe(10000);
+    expect(federalTax).toBe(1000);
   });
 
-  it('spans multiple brackets correctly (single)', () => {
-    // $60,000 single: 10% on 0–11,925, 12% on 11,926–48,475, 22% on 48,476–60,000
-    const band1 = Math.round(11_925 * 0.10 * 100) / 100;           // 1,192.50
-    const band2 = Math.round((48_475 - 11_926) * 0.12 * 100) / 100; // 4,385.88
-    const band3 = Math.round((60_000 - 48_476) * 0.22 * 100) / 100; // 2,535.28
-    const expected = Math.round((band1 + band2 + band3) * 100) / 100;
-
-    const result = computeFederalTax(60_000, 'single');
-    expect(result.totalTax).toBeCloseTo(expected, 1);
-    expect(result.brackets[0].rate).toBe(0.10);
-    expect(result.brackets[1].rate).toBe(0.12);
-    expect(result.brackets[2].rate).toBe(0.22);
+  it("spans multiple brackets — single, gross $60,000", () => {
+    // taxable = 60000 - 15000 = 45000
+    // 10% on 0–11925 = 1192.50
+    // 12% on 11925–45000 = 12% × 33075 = 3969.00
+    const { taxableIncome, federalTax } = computeFederalIncomeTax(60000, "single");
+    expect(taxableIncome).toBe(45000);
+    const expected = parseFloat((11925 * 0.10 + (45000 - 11925) * 0.12).toFixed(2));
+    expect(federalTax).toBeCloseTo(expected, 1);
   });
 
-  it('spans multiple brackets correctly (married_filing_jointly)', () => {
-    // $100,000 MFJ: 10% on 0–23,850, 12% on 23,851–96,950, 22% on 96,951–100,000
-    const band1 = Math.round(23_850 * 0.10 * 100) / 100;
-    const band2 = Math.round((96_950 - 23_851) * 0.12 * 100) / 100;
-    const band3 = Math.round((100_000 - 96_951) * 0.22 * 100) / 100;
-    const expected = Math.round((band1 + band2 + band3) * 100) / 100;
-
-    const result = computeFederalTax(100_000, 'married_filing_jointly');
-    expect(result.totalTax).toBeCloseTo(expected, 1);
+  it("spans multiple brackets — marriedFilingJointly, gross $130,000", () => {
+    // taxable = 130000 - 30000 = 100000
+    // 10% on 0–23850 = 2385.00
+    // 12% on 23850–96950 = 12% × 73100 = 8772.00
+    // 22% on 96950–100000 = 22% × 3050 = 671.00
+    const { taxableIncome, federalTax } = computeFederalIncomeTax(130000, "marriedFilingJointly");
+    expect(taxableIncome).toBe(100000);
+    const expected = parseFloat(
+      (23850 * 0.10 + (96950 - 23850) * 0.12 + (100000 - 96950) * 0.22).toFixed(2),
+    );
+    expect(federalTax).toBeCloseTo(expected, 1);
   });
 
-  it('reaches the top (37%) bracket (single)', () => {
-    const result = computeFederalTax(700_000, 'single');
-    const topBracket = result.brackets.find((b) => b.rate === 0.37);
-    expect(topBracket).toBeDefined();
-    expect(topBracket!.taxableIncome).toBeGreaterThan(0);
-    expect(topBracket!.taxAmount).toBeGreaterThan(0);
-    // Spot-check: income above 626,350 at 37%
-    expect(topBracket!.taxableIncome).toBe(700_000 - 626_351);
+  it("reaches the 37% bracket — single, gross $650,000", () => {
+    // taxable = 650000 - 15000 = 635000; top bracket starts at 626350
+    const { taxableIncome, federalTax } = computeFederalIncomeTax(650000, "single");
+    expect(taxableIncome).toBe(635000);
+    // Spot-check: income above 626350 at 37%
+    const topSlice = parseFloat(((635000 - 626350) * 0.37).toFixed(2));
+    expect(federalTax).toBeGreaterThan(topSlice);
   });
 
-  it('computes top bracket correctly for married_filing_separately', () => {
-    const result = computeFederalTax(800_000, 'married_filing_separately');
-    const topBracket = result.brackets.find((b) => b.rate === 0.37);
-    expect(topBracket).toBeDefined();
-    expect(topBracket!.taxableIncome).toBe(800_000 - 375_801);
+  it("headOfHousehold — gross $40,000 uses HoH standard deduction $22,500", () => {
+    // taxable = 40000 - 22500 = 17500; 10% on 17000 = 1700, 12% on 500 = 60
+    const { taxableIncome, federalTax } = computeFederalIncomeTax(40000, "headOfHousehold");
+    expect(taxableIncome).toBe(17500);
+    const expected = parseFloat((17000 * 0.10 + 500 * 0.12).toFixed(2));
+    expect(federalTax).toBeCloseTo(expected, 1);
   });
 
-  it('computes correctly for head_of_household', () => {
-    // Income exactly at top of 10% bracket for HoH = 17,000
-    const result = computeFederalTax(17_000, 'head_of_household');
-    expect(result.totalTax).toBe(Math.round(17_000 * 0.10 * 100) / 100);
+  it("marriedFilingSeparately — uses same brackets/deduction as single", () => {
+    const mfs = computeFederalIncomeTax(50000, "marriedFilingSeparately");
+    const single = computeFederalIncomeTax(50000, "single");
+    expect(mfs.taxableIncome).toBe(single.taxableIncome);
+    expect(mfs.federalTax).toBe(single.federalTax);
   });
 
-  it('returns only first-bracket entries when income is below second bracket min (MFJ)', () => {
-    const result = computeFederalTax(20_000, 'married_filing_jointly');
-    // First bracket max = 23,850, so $20k falls entirely in the 10% band
-    expect(result.totalTax).toBe(2_000);
-    const nonZero = result.brackets.filter((b) => b.taxableIncome > 0);
-    expect(nonZero).toHaveLength(1);
-    expect(nonZero[0].rate).toBe(0.10);
+  it("returns zero for zero gross income", () => {
+    const { taxableIncome, federalTax } = computeFederalIncomeTax(0, "single");
+    expect(taxableIncome).toBe(0);
+    expect(federalTax).toBe(0);
   });
 });
 
-// ─── computeSelfEmploymentTax ─────────────────────────────────────────────────
+// ─── computeFICA ─────────────────────────────────────────────────────────────
 
-describe('computeSelfEmploymentTax', () => {
-  it('returns zeros for zero income', () => {
-    const result = computeSelfEmploymentTax(0);
-    expect(result.selfEmploymentTax).toBe(0);
-    expect(result.deductiblePortion).toBe(0);
+describe("computeFICA", () => {
+  it("returns zero SS and Medicare for zero income", () => {
+    const { socialSecurityTax, medicareTax } = computeFICA(0, "single");
+    expect(socialSecurityTax).toBe(0);
+    expect(medicareTax).toBe(0);
   });
 
-  it('returns zeros for negative income', () => {
-    const result = computeSelfEmploymentTax(-5_000);
-    expect(result.selfEmploymentTax).toBe(0);
-    expect(result.deductiblePortion).toBe(0);
+  it("SS is capped at the $176,100 wage base", () => {
+    const { socialSecurityTax } = computeFICA(300000, "single");
+    expect(socialSecurityTax).toBe(parseFloat((176100 * 0.062).toFixed(2)));
   });
 
-  it('applies 0.9235 × 0.153 correctly for positive income', () => {
-    const income = 50_000;
-    const netSE = income * 0.9235;
-    const expectedTax = Math.round(netSE * 0.153 * 100) / 100;
-    const expectedDeductible = Math.round(expectedTax * 0.5 * 100) / 100;
-
-    const result = computeSelfEmploymentTax(income);
-    expect(result.selfEmploymentTax).toBe(expectedTax);
-    expect(result.deductiblePortion).toBe(expectedDeductible);
+  it("SS is not capped below the wage base", () => {
+    const { socialSecurityTax } = computeFICA(50000, "single");
+    expect(socialSecurityTax).toBe(parseFloat((50000 * 0.062).toFixed(2)));
   });
 
-  it('deductible portion is round2(selfEmploymentTax × 0.5)', () => {
-    const result = computeSelfEmploymentTax(100_000);
-    // Both values are independently rounded to 2 decimal places by the implementation
-    const expected = Math.round(result.selfEmploymentTax * 0.5 * 100) / 100;
-    expect(result.deductiblePortion).toBe(expected);
-  });
-});
-
-// ─── computeAdditionalMedicareTax ─────────────────────────────────────────────
-
-describe('computeAdditionalMedicareTax', () => {
-  it('returns 0 when wages are below the single threshold ($200,000)', () => {
-    expect(computeAdditionalMedicareTax(199_999, 'single')).toBe(0);
+  it("Medicare is flat 1.45% below the additional threshold (single = $200k)", () => {
+    const { medicareTax } = computeFICA(150000, "single");
+    expect(medicareTax).toBe(parseFloat((150000 * 0.0145).toFixed(2)));
   });
 
-  it('returns 0 when wages equal the threshold exactly (single)', () => {
-    expect(computeAdditionalMedicareTax(200_000, 'single')).toBe(0);
+  it("Medicare includes 0.9% additional rate above $200k (single)", () => {
+    const { medicareTax } = computeFICA(250000, "single");
+    const expected = parseFloat(
+      (200000 * 0.0145 + 50000 * (0.0145 + 0.009)).toFixed(2),
+    );
+    expect(medicareTax).toBeCloseTo(expected, 1);
   });
 
-  it('taxes the excess above $200,000 at 0.9% for single filers', () => {
-    const wages = 250_000;
-    const expected = Math.round((250_000 - 200_000) * 0.009 * 100) / 100;
-    expect(computeAdditionalMedicareTax(wages, 'single')).toBe(expected);
-  });
+  it("Medicare additional threshold is $250k for marriedFilingJointly", () => {
+    // No additional Medicare below $250k
+    const { medicareTax: below } = computeFICA(249999, "marriedFilingJointly");
+    expect(below).toBe(parseFloat((249999 * 0.0145).toFixed(2)));
 
-  it('uses the higher $250,000 threshold for married_filing_jointly', () => {
-    expect(computeAdditionalMedicareTax(249_999, 'married_filing_jointly')).toBe(0);
-    const wages = 300_000;
-    const expected = Math.round((300_000 - 250_000) * 0.009 * 100) / 100;
-    expect(computeAdditionalMedicareTax(wages, 'married_filing_jointly')).toBe(expected);
-  });
-
-  it('uses the $200,000 threshold for married_filing_separately', () => {
-    const wages = 220_000;
-    const expected = Math.round((220_000 - 200_000) * 0.009 * 100) / 100;
-    expect(computeAdditionalMedicareTax(wages, 'married_filing_separately')).toBe(expected);
-  });
-
-  it('uses the $200,000 threshold for head_of_household', () => {
-    const wages = 210_000;
-    const expected = Math.round((210_000 - 200_000) * 0.009 * 100) / 100;
-    expect(computeAdditionalMedicareTax(wages, 'head_of_household')).toBe(expected);
+    // Above $250k additional 0.9% kicks in
+    const { medicareTax: above } = computeFICA(300000, "marriedFilingJointly");
+    const expected = parseFloat(
+      (250000 * 0.0145 + 50000 * (0.0145 + 0.009)).toFixed(2),
+    );
+    expect(above).toBeCloseTo(expected, 1);
   });
 });

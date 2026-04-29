@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { TaxSummaryPanel } from "@/components/tax/TaxSummaryPanel";
-import type { TaxSummary } from "@/lib/tax/types";
+import type { TaxResult } from "@/lib/tax/types";
 import type { DocumentSummary } from "@/types/document";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -69,7 +69,7 @@ export default function TaxBreakdownPage() {
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
   const [selectedDocId, setSelectedDocId] = useState<string>("");
   const [filingStatus, setFilingStatus] = useState<string>("single");
-  const [summary, setSummary] = useState<TaxSummary | null>(null);
+  const [summary, setSummary] = useState<TaxResult | null>(null);
   const [stateCode, setStateCode] = useState<string>("");
   const [isLoadingDocs, setIsLoadingDocs] = useState(true);
   const [isComputing, setIsComputing] = useState(false);
@@ -118,7 +118,7 @@ export default function TaxBreakdownPage() {
       if (!res.ok) {
         throw new Error(data.error ?? "Computation failed");
       }
-      setSummary(data.summary as TaxSummary);
+      setSummary(data.summary as TaxResult);
       if (data.stateCode) setStateCode(data.stateCode as string);
       setHasComputed(true);
     } catch (err) {
