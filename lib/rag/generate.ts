@@ -1,11 +1,12 @@
 import { streamText, generateText } from "ai";
-import { getAnthropicClient, CLAUDE_MODEL } from "@/lib/ai/client";
+import { getChatModel } from "@/lib/ai/client";
 import {
   buildChatSystemPrompt,
   buildTitleGenerationPrompt,
 } from "@/lib/ai/prompts/chat-system";
 import { retrieveRelevantChunks, RetrievedChunk } from "./retrieve";
 import { RAG_TOP_K } from "@/lib/ai/prompts/constants";
+import type { ChatLocale } from "@/types/chat";
 
 export interface ChatHistoryMessage {
   role: "user" | "assistant";
@@ -16,6 +17,8 @@ export interface RAGGenerateOptions {
   query: string;
   chatHistory?: ChatHistoryMessage[];
   topK?: number;
+  /** Assistant reply language (prompts + disclaimer). Default \`en\`. */
+  locale?: ChatLocale;
   /** Called when the full streamed response is available. Sources are injected automatically. */
   onFinish?: (event: { text: string; sources: RetrievedChunk[] }) => Promise<void> | void;
 }
@@ -40,19 +43,33 @@ export interface RAGGenerateResult {
 export async function generateRAGResponse(
   options: RAGGenerateOptions
 ): Promise<RAGGenerateResult> {
-  const { query, chatHistory = [], topK = RAG_TOP_K, onFinish } = options;
+  const {
+    query,
+    chatHistory = [],
+    topK = RAG_TOP_K,
+    locale = "en",
+    onFinish,
+  } = options;
 
   // Retrieve relevant knowledge chunks
   const sources = await retrieveRelevantChunks(query, topK);
 
-  // Build the grounding system prompt
-  const systemPrompt = buildChatSystemPrompt(sources);
+  // Cap each chunk's content so the system prompt stays within ~4 000 tokens
+  // (~16 000 chars). With RAG_TOP_K=5, ~3 000 chars per chunk ≈ 750 tokens each
+  // → 5 × 750 + ~500 for instructions = ~4 250 tokens total for the system prompt.
+  const MAX_CHUNK_CHARS = 3_000;
+  const cappedSources = sources.map((s) =>
+    s.content.length > MAX_CHUNK_CHARS
+      ? { ...s, content: s.content.slice(0, MAX_CHUNK_CHARS) + " …[truncated]" }
+      : s,
+  );
 
-  const anthropic = getAnthropicClient();
+  // Build the grounding system prompt
+  const systemPrompt = buildChatSystemPrompt(cappedSources, locale);
 
   // Stream the response
   const stream = streamText({
-    model: anthropic(CLAUDE_MODEL),
+    model: getChatModel(),
     system: systemPrompt,
     messages: [
       ...chatHistory,
@@ -62,24 +79,25 @@ export async function generateRAGResponse(
     temperature: 0.2, // Low temperature for factual tax information
     onFinish: onFinish
       ? async ({ text }) => {
-          await onFinish({ text, sources });
+          await onFinish({ text, sources: cappedSources });
         }
       : undefined,
   });
 
-  return { stream, sources };
+  return { stream, sources: cappedSources };
 }
 
 /**
  * Generates a short conversation title from the first user message.
  * Used to auto-label new chat sessions.
  */
-export async function generateChatTitle(firstMessage: string): Promise<string> {
-  const anthropic = getAnthropicClient();
-
+export async function generateChatTitle(
+  firstMessage: string,
+  locale: ChatLocale = "en",
+): Promise<string> {
   const { text } = await generateText({
-    model: anthropic(CLAUDE_MODEL),
-    system: buildTitleGenerationPrompt(),
+    model: getChatModel(),
+    system: buildTitleGenerationPrompt(locale),
     prompt: firstMessage,
     maxTokens: 20,
   });

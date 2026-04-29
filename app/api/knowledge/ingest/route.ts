@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import path from "path";
 import { ingestFile, ingestKnowledgeDirectory } from "@/lib/rag/ingest";
+import { getServerConfig } from "@/lib/config";
 
 /**
  * POST /api/knowledge/ingest
@@ -21,7 +22,7 @@ import { ingestFile, ingestKnowledgeDirectory } from "@/lib/rag/ingest";
  */
 export async function POST(req: NextRequest): Promise<NextResponse> {
   // ── Auth: Bearer token ──────────────────────────────────────────────────────
-  const ingestSecret = process.env.KNOWLEDGE_INGEST_SECRET;
+  const ingestSecret = getServerConfig().KNOWLEDGE_INGEST_SECRET;
   if (!ingestSecret) {
     return NextResponse.json(
       { error: "KNOWLEDGE_INGEST_SECRET is not configured on the server." },

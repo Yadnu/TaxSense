@@ -1,45 +1,46 @@
-import { openai } from "@ai-sdk/openai";
-import { embed, embedMany } from "ai";
+import { HfInference } from "@huggingface/inference";
 import { getServerConfig } from "@/lib/config";
 
-export const EMBEDDING_MODEL = "text-embedding-3-small" as const;
-export const EMBEDDING_DIMENSIONS = 1536 as const;
+export const EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2" as const;
+export const EMBEDDING_DIMENSIONS = 384 as const;
 
-/**
- * Max texts per batch for embedMany — stays well within OpenAI rate limits.
- * text-embedding-3-small supports up to 2048 inputs per request, but we keep
- * batches small to respect token limits.
- */
-const BATCH_SIZE = 100;
+const BATCH_SIZE = 64;
 
-function getEmbeddingModel() {
-  // Validate that OPENAI_API_KEY is set before making any API calls.
-  getServerConfig();
-  return openai.embedding(EMBEDDING_MODEL);
+function getHfClient() {
+  const { HUGGINGFACE_API_KEY } = getServerConfig();
+  if (!HUGGINGFACE_API_KEY) return null;
+  return new HfInference(HUGGINGFACE_API_KEY);
+}
+
+function toVector(raw: unknown): number[] {
+  // featureExtraction returns number[] (mean-pooled) for sentence-transformers
+  if (Array.isArray(raw) && typeof raw[0] === "number") return raw as number[];
+  // Some models return number[][] (one vector per token) — take the first row
+  if (Array.isArray(raw) && Array.isArray(raw[0])) return raw[0] as number[];
+  throw new Error(`Unexpected embedding shape from HuggingFace`);
 }
 
 /**
- * Generates a single embedding vector for the given text.
- * Returns a 1536-dimensional float array (text-embedding-3-small).
+ * Returns null when HUGGINGFACE_API_KEY is not configured — callers should
+ * skip embedding-dependent work (e.g. RAG retrieval) in that case.
  */
-export async function generateEmbedding(text: string): Promise<number[]> {
-  const model = getEmbeddingModel();
-  const { embedding } = await embed({ model, value: text });
-  return embedding;
+export async function generateEmbedding(text: string): Promise<number[] | null> {
+  const hf = getHfClient();
+  if (!hf) return null;
+  const raw = await hf.featureExtraction({ model: EMBEDDING_MODEL, inputs: text });
+  return toVector(raw);
 }
 
-/**
- * Generates embeddings for multiple texts, batching requests to avoid
- * hitting API rate limits.
- */
-export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
-  const model = getEmbeddingModel();
+export async function generateEmbeddings(texts: string[]): Promise<number[][] | null> {
+  const hf = getHfClient();
+  if (!hf) return null;
   const results: number[][] = [];
 
   for (let i = 0; i < texts.length; i += BATCH_SIZE) {
     const batch = texts.slice(i, i + BATCH_SIZE);
-    const { embeddings } = await embedMany({ model, values: batch });
-    results.push(...embeddings);
+    const raw = await hf.featureExtraction({ model: EMBEDDING_MODEL, inputs: batch });
+    // Batch input returns number[][]
+    results.push(...(raw as number[][]));
   }
 
   return results;

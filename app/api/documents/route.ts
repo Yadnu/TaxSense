@@ -1,4 +1,5 @@
-import { auth } from "@clerk/nextjs/server";
+import arcjet, { tokenBucket } from "@arcjet/next";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { uploadToS3, buildS3Key, deleteFromS3 } from "@/lib/storage/s3";
@@ -9,6 +10,33 @@ import {
   MAX_FILE_SIZE_BYTES,
 } from "@/lib/validators/document";
 import { safeLog } from "@/lib/utils";
+import { getServerConfig } from "@/lib/config";
+
+// ─── Arcjet rate limiter ──────────────────────────────────────────────────────
+// Applied only on POST (upload) — list (GET) is cheaper and not abuse-prone.
+// Token bucket: 5 uploads per user per minute, burst of 10.
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _aj: any = null;
+
+function getAj() {
+  const key = getServerConfig().ARCJET_KEY;
+  if (!key) return null;
+  if (!_aj) {
+    _aj = arcjet({
+      key,
+      rules: [
+        tokenBucket({
+          mode: "LIVE",
+          refillRate: 5,   // 5 uploads refilled per interval
+          interval: 60,   // per 60 seconds
+          capacity: 10,   // burst up to 10
+        }),
+      ],
+    });
+  }
+  return _aj;
+}
 
 // ─── GET /api/documents ───────────────────────────────────────────────────────
 // Returns the authenticated user's documents ordered by upload date (newest first).
@@ -45,6 +73,18 @@ export async function POST(req: NextRequest) {
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Apply rate limiting on upload — skip when ARCJET_KEY is not configured
+  const aj = getAj();
+  if (aj) {
+    const decision = await aj.protect(req, { requested: 1 });
+    if (decision.isDenied()) {
+      return NextResponse.json(
+        { error: "Too many uploads. Please wait a moment before trying again." },
+        { status: 429 }
+      );
+    }
   }
 
   let formData: FormData;
@@ -119,6 +159,16 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Persist document record ────────────────────────────────────────────────
+
+  const clerkUser = await currentUser();
+  await prisma.user.upsert({
+    where: { id: userId },
+    update: {},
+    create: {
+      id: userId,
+      email: clerkUser?.emailAddresses[0]?.emailAddress ?? "",
+    },
+  });
 
   let document;
   try {
