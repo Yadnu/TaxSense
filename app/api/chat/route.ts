@@ -5,6 +5,7 @@ import { z } from "zod";
 import prisma from "@/lib/db";
 import { generateRAGResponse, generateChatTitle } from "@/lib/rag/generate";
 import { getServerConfig } from "@/lib/config";
+import { checkGuardrails, checkOutputGuardrails } from "@/lib/guardrails";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _aj: any = null;
@@ -98,6 +99,52 @@ function trimChatHistory(
   return kept;
 }
 
+// ─── Guardrail refusal helper ────────────────────────────────────────────────
+
+/**
+ * Builds a minimal AI SDK data-stream response from a static string.
+ * The Vercel AI SDK useChat client expects the `text/plain; X-Vercel-AI-Data-Stream: v1`
+ * wire format; this helper writes the three required lines without calling an LLM.
+ */
+function createRefusalStreamResponse(text: string): Response {
+  const encoder = new TextEncoder();
+  const tokenCount = Math.ceil(text.length / 4);
+
+  const stream = new ReadableStream({
+    start(controller) {
+      // Text chunk
+      controller.enqueue(encoder.encode(`0:${JSON.stringify(text)}\n`));
+      // Step finish
+      controller.enqueue(
+        encoder.encode(
+          `e:${JSON.stringify({
+            finishReason: "stop",
+            usage: { promptTokens: 0, completionTokens: tokenCount },
+          })}\n`,
+        ),
+      );
+      // Done
+      controller.enqueue(
+        encoder.encode(
+          `d:${JSON.stringify({
+            finishReason: "stop",
+            usage: { promptTokens: 0, completionTokens: tokenCount },
+          })}\n`,
+        ),
+      );
+      controller.close();
+    },
+  });
+
+  return new Response(stream, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "X-Vercel-AI-Data-Stream": "v1",
+    },
+  });
+}
+
 // ─── POST /api/chat ──────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
@@ -111,28 +158,6 @@ export async function POST(req: NextRequest) {
     const decision = await aj.protect(req, { requested: 1 });
     if (decision.isDenied()) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
-    }
-  }
-
-  // Ensure the user exists in the DB (normally created via Clerk webhook;
-  // this upsert covers local dev where the webhook isn't configured).
-  const clerkUser = await currentUser();
-  if (clerkUser) {
-    const email =
-      clerkUser.emailAddresses.find((e) => e.id === clerkUser.primaryEmailAddressId)
-        ?.emailAddress ?? clerkUser.emailAddresses[0]?.emailAddress;
-    if (email) {
-      await prisma.user.upsert({
-        where: { id: userId },
-        update: {},
-        create: {
-          id: userId,
-          email,
-          firstName: clerkUser.firstName ?? undefined,
-          lastName: clerkUser.lastName ?? undefined,
-          imageUrl: clerkUser.imageUrl ?? undefined,
-        },
-      });
     }
   }
 
@@ -167,6 +192,53 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Empty message" }, { status: 400 });
   }
 
+  // ── Input guardrails ──────────────────────────────────────────────────────
+  // Runs before any DB work or RAG calls so blocked/redacted messages never
+  // reach the retrieval or generation pipeline.
+  const guardrail = await checkGuardrails(userQuery);
+
+  if (guardrail.flags.length > 0) {
+    // Log every guardrail event; use warn so it surfaces in aggregated logs.
+    console.warn("[/api/chat][guardrails]", {
+      userId,
+      allowed: guardrail.allowed,
+      flags: guardrail.flags,
+      reason: guardrail.reason,
+    });
+  }
+
+  if (!guardrail.allowed) {
+    // Return the canned response in AI SDK data-stream format so useChat
+    // renders it as a normal assistant message without frontend changes.
+    return createRefusalStreamResponse(guardrail.refusalResponse!);
+  }
+
+  // The message text forwarded to RAG — raw when no PII was found, redacted
+  // otherwise.  All downstream code uses this variable, never `userQuery`.
+  const safeQuery = guardrail.redactedMessage;
+
+  // ── User upsert ───────────────────────────────────────────────────────────
+  // Normally created via the Clerk webhook; this upsert covers local dev.
+  const clerkUser = await currentUser();
+  if (clerkUser) {
+    const email =
+      clerkUser.emailAddresses.find((e) => e.id === clerkUser.primaryEmailAddressId)
+        ?.emailAddress ?? clerkUser.emailAddresses[0]?.emailAddress;
+    if (email) {
+      await prisma.user.upsert({
+        where: { id: userId },
+        update: {},
+        create: {
+          id: userId,
+          email,
+          firstName: clerkUser.firstName ?? undefined,
+          lastName: clerkUser.lastName ?? undefined,
+          imageUrl: clerkUser.imageUrl ?? undefined,
+        },
+      });
+    }
+  }
+
   // ── Session management ────────────────────────────────────────────────────
   let sessionId: string;
 
@@ -184,8 +256,10 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Persist user message ──────────────────────────────────────────────────
+  // Always store the redacted version so the database never contains raw PII
+  // that was typed into chat.
   await prisma.chatMessage.create({
-    data: { sessionId, role: "USER", content: userQuery },
+    data: { sessionId, role: "USER", content: safeQuery },
   });
 
   const isNewSession = !existingSessionId;
@@ -219,10 +293,23 @@ export async function POST(req: NextRequest) {
   // ── Generate streaming RAG response ──────────────────────────────────────
   try {
     const { stream } = await generateRAGResponse({
-      query: userQuery,
+      query: safeQuery,
       chatHistory,
       locale,
       onFinish: async ({ text, sources }) => {
+        // ── Output guardrails ──────────────────────────────────────────────
+        // Check the full response text for accidental PII leakage.
+        // Since we're streaming, the client has already received the text;
+        // we redact before DB persistence and emit a warning for the audit trail.
+        const outputGuardrail = checkOutputGuardrails(text);
+        if (outputGuardrail.hasLeakedPII) {
+          console.warn("[/api/chat][output-guardrails] PII detected in LLM response", {
+            userId,
+            sessionId,
+            flags: outputGuardrail.flags,
+          });
+        }
+
         // Persist assistant message — wrapped so a DB failure never
         // propagates into the AI SDK stream and surfaces as a client error.
         try {
@@ -230,7 +317,7 @@ export async function POST(req: NextRequest) {
             data: {
               sessionId,
               role: "ASSISTANT",
-              content: text,
+              content: outputGuardrail.redactedText,
               sources: sources.map((s) => ({
                 chunkId: s.id,
                 title: s.title,
@@ -246,7 +333,7 @@ export async function POST(req: NextRequest) {
         // Auto-generate a title for newly created sessions
         if (isNewSession) {
           try {
-            const title = await generateChatTitle(userQuery, locale);
+            const title = await generateChatTitle(safeQuery, locale);
             await prisma.chatSession.update({
               where: { id: sessionId },
               data: { title },
