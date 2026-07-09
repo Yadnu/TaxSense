@@ -25,10 +25,11 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  documents    Document[]
-  chatSessions ChatSession[]
-  taxYears     TaxYear[]
-  auditLogs    AuditLog[]
+  documents       Document[]
+  chatSessions    ChatSession[]
+  taxYears        TaxYear[]
+  auditLogs       AuditLog[]
+  guardrailEvents GuardrailEvent[]
 
   @@index([email])
 }
@@ -262,6 +263,32 @@ model ValidationError {
   form TaxForm @relation(fields: [formId], references: [id], onDelete: Cascade)
 
   @@index([formId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GuardrailEvent (one record per chat message that triggered any guardrail)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model GuardrailEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  /// Null when the message was blocked before a session was created.
+  sessionId String?
+  /// "input" for pre-LLM checks, "output" for post-generation PII scan.
+  stage     String
+  /// All flags raised, e.g. ["pii:ssn", "jailbreak:dan", "topic:off_topic"].
+  flags     String[]
+  /// True when the message was refused and never reached the RAG pipeline.
+  blocked   Boolean
+  /// Human-readable reason when blocked=true.
+  reason    String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([blocked, createdAt])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

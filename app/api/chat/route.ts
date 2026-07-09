@@ -6,6 +6,7 @@ import prisma from "@/lib/db";
 import { generateRAGResponse, generateChatTitle } from "@/lib/rag/generate";
 import { getServerConfig } from "@/lib/config";
 import { checkGuardrails, checkOutputGuardrails } from "@/lib/guardrails";
+import { recordGuardrailEvent } from "@/lib/guardrails/events";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _aj: any = null;
@@ -197,12 +198,16 @@ export async function POST(req: NextRequest) {
   // reach the retrieval or generation pipeline.
   const guardrail = await checkGuardrails(userQuery);
 
-  if (guardrail.flags.length > 0) {
-    // Log every guardrail event; use warn so it surfaces in aggregated logs.
-    console.warn("[/api/chat][guardrails]", {
+  // Persist any guardrail findings and (for blocked requests) dispatch
+  // the Inngest threshold-alert event. Only written when flags were raised
+  // so clean messages don't generate spurious records.
+  if (guardrail.flags.length > 0 || !guardrail.allowed) {
+    void recordGuardrailEvent({
       userId,
-      allowed: guardrail.allowed,
+      sessionId: existingSessionId ?? null,
+      stage: "input",
       flags: guardrail.flags,
+      blocked: !guardrail.allowed,
       reason: guardrail.reason,
     });
   }
@@ -303,10 +308,13 @@ export async function POST(req: NextRequest) {
         // we redact before DB persistence and emit a warning for the audit trail.
         const outputGuardrail = checkOutputGuardrails(text);
         if (outputGuardrail.hasLeakedPII) {
-          console.warn("[/api/chat][output-guardrails] PII detected in LLM response", {
+          void recordGuardrailEvent({
             userId,
             sessionId,
+            stage: "output",
             flags: outputGuardrail.flags,
+            blocked: false,
+            reason: "PII detected in LLM response — redacted before DB persistence",
           });
         }
 
