@@ -7,6 +7,7 @@ import { generateRAGResponse, generateChatTitle } from "@/lib/rag/generate";
 import { getServerConfig } from "@/lib/config";
 import { checkGuardrails, checkOutputGuardrails } from "@/lib/guardrails";
 import { recordGuardrailEvent } from "@/lib/guardrails/events";
+import { LOW_CONFIDENCE_DISCLAIMER } from "@/lib/ai/prompts/constants";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _aj: any = null;
@@ -301,7 +302,7 @@ export async function POST(req: NextRequest) {
       query: safeQuery,
       chatHistory,
       locale,
-      onFinish: async ({ text, sources }) => {
+      onFinish: async ({ text, sources, lowConfidence, groundingScore }) => {
         // ── Output guardrails ──────────────────────────────────────────────
         // Check the full response text for accidental PII leakage.
         // Since we're streaming, the client has already received the text;
@@ -318,6 +319,32 @@ export async function POST(req: NextRequest) {
           });
         }
 
+        // ── Retrieval confidence guardrail ────────────────────────────────
+        // When the best chunk similarity was weak (0.3–0.45), append an extra
+        // disclaimer to the persisted message and emit an audit event so ops
+        // teams can monitor query topics that the knowledge base covers poorly.
+        let persistedContent = outputGuardrail.redactedText;
+        if (lowConfidence) {
+          persistedContent += LOW_CONFIDENCE_DISCLAIMER;
+          void recordGuardrailEvent({
+            userId,
+            sessionId,
+            stage: "output",
+            flags: ["retrieval:low_confidence"],
+            blocked: false,
+            reason: "Best retrieved chunk similarity below low-confidence threshold (0.45)",
+          });
+        }
+
+        // ── Grounding score logging ───────────────────────────────────────
+        if (groundingScore === -1) {
+          console.error("[/api/chat] Grounding check failed for session:", sessionId);
+        } else if (groundingScore < 0.5) {
+          console.warn(
+            `[/api/chat] Low grounding score ${groundingScore.toFixed(2)} for session: ${sessionId}`,
+          );
+        }
+
         // Persist assistant message — wrapped so a DB failure never
         // propagates into the AI SDK stream and surfaces as a client error.
         try {
@@ -325,7 +352,7 @@ export async function POST(req: NextRequest) {
             data: {
               sessionId,
               role: "ASSISTANT",
-              content: outputGuardrail.redactedText,
+              content: persistedContent,
               sources: sources.map((s) => ({
                 chunkId: s.id,
                 title: s.title,

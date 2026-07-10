@@ -1,6 +1,10 @@
 import prisma from "@/lib/db";
 import { generateEmbedding } from "@/lib/ai/embeddings";
-import { RAG_TOP_K, RAG_MIN_SIMILARITY } from "@/lib/ai/prompts/constants";
+import {
+  RAG_TOP_K,
+  RAG_MIN_SIMILARITY,
+  RAG_LOW_CONFIDENCE_THRESHOLD,
+} from "@/lib/ai/prompts/constants";
 
 export interface RetrievedChunk {
   id: string;
@@ -13,18 +17,32 @@ export interface RetrievedChunk {
 }
 
 /**
+ * Result returned by {@link retrieveRelevantChunks}.
+ *
+ * `lowConfidence` is `true` when the best chunk's similarity score is above
+ * the RAG_MIN_SIMILARITY floor but below RAG_LOW_CONFIDENCE_THRESHOLD (0.45),
+ * signalling that the knowledge base has only a weak match for the query.
+ * Callers should surface an additional disclaimer in this case.
+ */
+export interface RetrievalResult {
+  chunks: RetrievedChunk[];
+  lowConfidence: boolean;
+}
+
+/**
  * Retrieves the most semantically relevant knowledge chunks for a given query
  * using pgvector cosine similarity search.
  *
  * Returns chunks ordered by descending similarity, filtered to those above
- * RAG_MIN_SIMILARITY to exclude weakly-relevant results.
+ * RAG_MIN_SIMILARITY, together with a `lowConfidence` flag that is set when
+ * the best match falls below RAG_LOW_CONFIDENCE_THRESHOLD.
  */
 export async function retrieveRelevantChunks(
   query: string,
   topK: number = RAG_TOP_K
-): Promise<RetrievedChunk[]> {
+): Promise<RetrievalResult> {
   const embedding = await generateEmbedding(query);
-  if (!embedding) return []; // No embedding model configured — skip retrieval
+  if (!embedding) return { chunks: [], lowConfidence: true }; // No embedding model — skip retrieval
 
   const vectorStr = `[${embedding.join(",")}]`;
 
@@ -58,5 +76,11 @@ export async function retrieveRelevantChunks(
     topK
   );
 
-  return rows.filter((row: RetrievedChunk) => row.similarity >= RAG_MIN_SIMILARITY);
+  const chunks = rows.filter((row: RetrievedChunk) => row.similarity >= RAG_MIN_SIMILARITY);
+
+  // rows are ordered most-similar-first; chunks[0] is the best match after filtering.
+  const bestSimilarity = chunks[0]?.similarity ?? 0;
+  const lowConfidence = bestSimilarity < RAG_LOW_CONFIDENCE_THRESHOLD;
+
+  return { chunks, lowConfidence };
 }

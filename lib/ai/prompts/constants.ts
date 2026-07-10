@@ -38,3 +38,20 @@ export const RAG_TOP_K = 5;
  * in the context. Chunks below this threshold are filtered out.
  */
 export const RAG_MIN_SIMILARITY = 0.3;
+
+/**
+ * Similarity score below which retrieval is considered low-confidence.
+ * Chunks are still included (they exceed the RAG_MIN_SIMILARITY floor) but
+ * the response is flagged so callers can attach an additional disclaimer and
+ * emit a guardrail audit event.
+ */
+export const RAG_LOW_CONFIDENCE_THRESHOLD = 0.45;
+
+/**
+ * Disclaimer appended to persisted assistant messages when the best retrieved
+ * chunk similarity falls between RAG_MIN_SIMILARITY and
+ * RAG_LOW_CONFIDENCE_THRESHOLD, indicating the knowledge base may not have
+ * closely matched the user's query.
+ */
+export const LOW_CONFIDENCE_DISCLAIMER =
+  "\n\n> **Note:** The knowledge sources retrieved for this response had low relevance scores. This answer may be incomplete or imprecise — please verify with a qualified tax professional or visit [IRS.gov](https://www.irs.gov) for authoritative guidance.";
