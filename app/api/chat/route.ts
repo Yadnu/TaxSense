@@ -5,7 +5,7 @@ import { z } from "zod";
 import prisma from "@/lib/db";
 import { generateRAGResponse, generateChatTitle } from "@/lib/rag/generate";
 import { getServerConfig } from "@/lib/config";
-import { checkGuardrails, checkOutputGuardrails } from "@/lib/guardrails";
+import { checkGuardrails, checkOutputGuardrails, checkDailyQuota, DAILY_MESSAGE_LIMIT } from "@/lib/guardrails";
 import { recordGuardrailEvent } from "@/lib/guardrails/events";
 import { LOW_CONFIDENCE_DISCLAIMER } from "@/lib/ai/prompts/constants";
 
@@ -217,6 +217,22 @@ export async function POST(req: NextRequest) {
     // Return the canned response in AI SDK data-stream format so useChat
     // renders it as a normal assistant message without frontend changes.
     return createRefusalStreamResponse(guardrail.refusalResponse!);
+  }
+
+  // ── Daily quota check ─────────────────────────────────────────────────────
+  // Runs after input guardrails so adversarial messages never consume quota
+  // budget — only valid messages that reach this point are counted.
+  const quota = await checkDailyQuota(userId);
+  if (!quota.allowed) {
+    void recordGuardrailEvent({
+      userId,
+      sessionId: existingSessionId ?? null,
+      stage: "input",
+      flags: ["quota:daily_limit"],
+      blocked: true,
+      reason: `Daily message limit (${DAILY_MESSAGE_LIMIT}) reached — count: ${quota.dailyCount}`,
+    });
+    return createRefusalStreamResponse(quota.refusalResponse!);
   }
 
   // The message text forwarded to RAG — raw when no PII was found, redacted

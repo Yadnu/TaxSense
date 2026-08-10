@@ -42,6 +42,10 @@ const serverEnvSchema = z.object({
   INNGEST_EVENT_KEY: z.string().min(1, "INNGEST_EVENT_KEY is required"),
   INNGEST_SIGNING_KEY: z.string().min(1, "INNGEST_SIGNING_KEY is required"),
 
+  // LangSmith (observability / tracing) — optional; tracing is skipped when absent
+  LANGSMITH_API_KEY: optionalEnvString,
+  LANGSMITH_PROJECT: optionalEnvString,
+
   // Node environment
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 });

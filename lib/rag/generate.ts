@@ -1,5 +1,6 @@
-import { streamText, generateText } from "ai";
+import { streamText, generateText } from "@/lib/ai/tracing";
 import { getChatModel } from "@/lib/ai/client";
+import { traceable } from "@/lib/ai/tracing";
 import {
   buildChatSystemPrompt,
   buildTitleGenerationPrompt,
@@ -94,55 +95,64 @@ async function checkGrounding(
  *
  * Returns the AI SDK stream object, the retrieved sources, and a `lowConfidence`
  * flag so the API route can persist citations and surface appropriate disclaimers.
+ *
+ * Wrapped with LangSmith `traceable` so the full RAG pipeline — retrieval,
+ * prompt construction, and LLM streaming — appears as a single "chain" run
+ * with child spans for each step.
  */
-export async function generateRAGResponse(
-  options: RAGGenerateOptions
-): Promise<RAGGenerateResult> {
-  const {
-    query,
-    chatHistory = [],
-    topK = RAG_TOP_K,
-    locale = "en",
-    onFinish,
-  } = options;
+export const generateRAGResponse = traceable(
+  async (options: RAGGenerateOptions): Promise<RAGGenerateResult> => {
+    const {
+      query,
+      chatHistory = [],
+      topK = RAG_TOP_K,
+      locale = "en",
+      onFinish,
+    } = options;
 
-  // Retrieve relevant knowledge chunks with confidence signal
-  const { chunks: sources, lowConfidence } = await retrieveRelevantChunks(query, topK);
+    // Retrieve relevant knowledge chunks with confidence signal
+    const { chunks: sources, lowConfidence } = await retrieveRelevantChunks(query, topK);
 
-  // Cap each chunk's content so the system prompt stays within ~4 000 tokens
-  // (~16 000 chars). With RAG_TOP_K=5, ~3 000 chars per chunk ≈ 750 tokens each
-  // → 5 × 750 + ~500 for instructions = ~4 250 tokens total for the system prompt.
-  const MAX_CHUNK_CHARS = 3_000;
-  const cappedSources = sources.map((s) =>
-    s.content.length > MAX_CHUNK_CHARS
-      ? { ...s, content: s.content.slice(0, MAX_CHUNK_CHARS) + " …[truncated]" }
-      : s,
-  );
+    // Cap each chunk's content so the system prompt stays within ~4 000 tokens
+    // (~16 000 chars). With RAG_TOP_K=5, ~3 000 chars per chunk ≈ 750 tokens each
+    // → 5 × 750 + ~500 for instructions = ~4 250 tokens total for the system prompt.
+    const MAX_CHUNK_CHARS = 3_000;
+    const cappedSources = sources.map((s) =>
+      s.content.length > MAX_CHUNK_CHARS
+        ? { ...s, content: s.content.slice(0, MAX_CHUNK_CHARS) + " …[truncated]" }
+        : s,
+    );
 
-  // Build the grounding system prompt
-  const systemPrompt = buildChatSystemPrompt(cappedSources, locale);
+    // Build the grounding system prompt
+    const systemPrompt = buildChatSystemPrompt(cappedSources, locale);
 
-  // Stream the response
-  const stream = streamText({
-    model: getChatModel(),
-    system: systemPrompt,
-    messages: [
-      ...chatHistory,
-      { role: "user" as const, content: query },
-    ],
-    maxTokens: 2048,
-    temperature: 0.2, // Low temperature for factual tax information
-    onFinish: onFinish
-      ? async ({ text }) => {
-          // Run the grounding check after full generation so we have the complete text.
-          const groundingScore = await checkGrounding(text, cappedSources);
-          await onFinish({ text, sources: cappedSources, lowConfidence, groundingScore });
-        }
-      : undefined,
-  });
+    // Stream the response
+    const stream = streamText({
+      model: getChatModel(),
+      system: systemPrompt,
+      messages: [
+        ...chatHistory,
+        { role: "user" as const, content: query },
+      ],
+      maxTokens: 2048,
+      temperature: 0.2, // Low temperature for factual tax information
+      onFinish: onFinish
+        ? async ({ text }) => {
+            // Run the grounding check after full generation so we have the complete text.
+            const groundingScore = await checkGrounding(text, cappedSources);
+            await onFinish({ text, sources: cappedSources, lowConfidence, groundingScore });
+          }
+        : undefined,
+    });
 
-  return { stream, sources: cappedSources, lowConfidence };
-}
+    return { stream, sources: cappedSources, lowConfidence };
+  },
+  {
+    name: "generate-rag-response",
+    run_type: "chain",
+    metadata: { pipeline: "rag" },
+  },
+);
 
 /**
  * Generates a short conversation title from the first user message.

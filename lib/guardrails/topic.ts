@@ -19,7 +19,7 @@
  * them back on-topic gracefully.
  */
 
-import { generateText } from "ai";
+import { generateText } from "@/lib/ai/tracing";
 import { getChatModel } from "@/lib/ai/client";
 
 export type TopicClassification = "on_topic" | "off_topic" | "uncertain";

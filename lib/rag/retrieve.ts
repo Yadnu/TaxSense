@@ -5,6 +5,7 @@ import {
   RAG_MIN_SIMILARITY,
   RAG_LOW_CONFIDENCE_THRESHOLD,
 } from "@/lib/ai/prompts/constants";
+import { traceable } from "@/lib/ai/tracing";
 
 export interface RetrievedChunk {
   id: string;
@@ -36,30 +37,32 @@ export interface RetrievalResult {
  * Returns chunks ordered by descending similarity, filtered to those above
  * RAG_MIN_SIMILARITY, together with a `lowConfidence` flag that is set when
  * the best match falls below RAG_LOW_CONFIDENCE_THRESHOLD.
+ *
+ * Wrapped with LangSmith `traceable` so each retrieval call is recorded as a
+ * "retriever" run — inputs (query, topK) and the full chunk list + confidence
+ * flag are visible in the LangSmith trace UI.
  */
-export async function retrieveRelevantChunks(
-  query: string,
-  topK: number = RAG_TOP_K
-): Promise<RetrievalResult> {
-  const embedding = await generateEmbedding(query);
-  if (!embedding) return { chunks: [], lowConfidence: true }; // No embedding model — skip retrieval
+export const retrieveRelevantChunks = traceable(
+  async (query: string, topK: number = RAG_TOP_K): Promise<RetrievalResult> => {
+    const embedding = await generateEmbedding(query);
+    if (!embedding) return { chunks: [], lowConfidence: true }; // No embedding model — skip retrieval
 
-  const vectorStr = `[${embedding.join(",")}]`;
+    const vectorStr = `[${embedding.join(",")}]`;
 
-  // Use $queryRawUnsafe with a parameterised query. The vector literal is
-  // constructed from a trusted number[] so injection is not a concern.
-  const rows = await prisma.$queryRawUnsafe<
-    Array<{
-      id: string;
-      source: string;
-      title: string;
-      content: string;
-      chunkIndex: number;
-      metadata: unknown;
-      similarity: number;
-    }>
-  >(
-    `
+    // Use $queryRawUnsafe with a parameterised query. The vector literal is
+    // constructed from a trusted number[] so injection is not a concern.
+    const rows = await prisma.$queryRawUnsafe<
+      Array<{
+        id: string;
+        source: string;
+        title: string;
+        content: string;
+        chunkIndex: number;
+        metadata: unknown;
+        similarity: number;
+      }>
+    >(
+      `
     SELECT
       id,
       source,
@@ -73,14 +76,19 @@ export async function retrieveRelevantChunks(
     ORDER BY embedding <=> '${vectorStr}'::vector
     LIMIT $1
     `,
-    topK
-  );
+      topK
+    );
 
-  const chunks = rows.filter((row: RetrievedChunk) => row.similarity >= RAG_MIN_SIMILARITY);
+    const chunks = rows.filter((row: RetrievedChunk) => row.similarity >= RAG_MIN_SIMILARITY);
 
-  // rows are ordered most-similar-first; chunks[0] is the best match after filtering.
-  const bestSimilarity = chunks[0]?.similarity ?? 0;
-  const lowConfidence = bestSimilarity < RAG_LOW_CONFIDENCE_THRESHOLD;
+    // rows are ordered most-similar-first; chunks[0] is the best match after filtering.
+    const bestSimilarity = chunks[0]?.similarity ?? 0;
+    const lowConfidence = bestSimilarity < RAG_LOW_CONFIDENCE_THRESHOLD;
 
-  return { chunks, lowConfidence };
-}
+    return { chunks, lowConfidence };
+  },
+  {
+    name: "retrieve-relevant-chunks",
+    run_type: "retriever",
+  },
+);
